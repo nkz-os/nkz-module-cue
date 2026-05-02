@@ -1,0 +1,39 @@
+{
+  "id": "cue",
+  "name": "Cuaderno de Campo (CUE)",
+  "description": "SIEX-compliant Cuaderno de Explotacion Unico para Espana (RD 1054/2022)",
+  "version": "0.1.0",
+  "author": "Nekazari",
+  "license": "AGPL-3.0",
+  "category": "agriculture",
+  "backend": {
+    "enabled": true,
+    "port": 5000,
+    "healthPath": "/health",
+    "routes": [
+      "/explotaciones",
+      "/explotaciones/:id",
+      "/explotaciones/:id/parcelas",
+      "/parcelas",
+      "/parcelas/:id",
+      "/parcelas/:id/declaraciones",
+      "/declaraciones",
+      "/declaraciones/:id",
+      "/declaraciones/:id/recintos",
+      "/recintos",
+      "/recintos/:id"
+    ]
+  },
+  "frontend": {
+    "enabled": false
+  },
+  "dependencies": {
+    "services": ["postgresql", "orion-ld"],
+    "extensions": ["postgis"]
+  },
+  "required_roles": ["Farmer", "TenantAdmin"],
+  "config": {
+    "country": "ES",
+    "siex_version": "1.0"
+  }
+}
