@@ -3,14 +3,12 @@ LABEL org.opencontainers.image.source=https://github.com/nkz-os/nkz-module-cue
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    postgresql-client \
-    gcc \
-    musl-dev \
-    postgresql-dev
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apk del .build-deps
+RUN apk add --no-cache postgresql-client
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ /app/app/
 

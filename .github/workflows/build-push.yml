@@ -37,7 +37,11 @@ jobs:
       - name: Run backend tests
         run: |
           cd backend
-          python -m pytest tests/ -v || echo "No tests found, skipping"
+          if [ -d tests ] && ls tests/test_*.py 1>/dev/null 2>&1; then
+            python -m pytest tests/ -v
+          else
+            echo "No test files found, skipping"
+          fi
 
   build:
     name: Build and Push Images
