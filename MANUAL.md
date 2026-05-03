@@ -9,7 +9,9 @@
 3. [Operaciones paso a paso](#operaciones-paso-a-paso)
 4. [Referencia de campos](#referencia-de-campos)
 5. [Validaciones](#validaciones)
-6. [Resolución de problemas](#resolución-de-problemas)
+6. [Registro ante la Administración](#registro-ante-la-administración)
+7. [Entidades y Catálogos SIEX](#entidades-y-catálogos-siex)
+8. [Resolución de problemas](#resolución-de-problemas)
 
 ---
 
@@ -329,6 +331,74 @@ Todo polígono GeoJSON enviado al sistema se valida con las siguientes reglas:
 - Cada entidad pertenece a un tenant (definido por `X-Tenant-ID`)
 - Un tenant no puede ver ni modificar las entidades de otro tenant
 - Las consultas siempre filtran por `isActive=true` (las entidades eliminadas no aparecen)
+
+---
+
+## Registro ante la Administración
+
+Para que el cuaderno de campo tenga validez legal, la explotación debe estar registrada en el sistema SIEX de su comunidad autónoma.
+
+### Requisitos previos
+
+1. **REGEPA**: La explotación debe tener un Número de Registro General de la Producción Agrícola (REGEPA) asignado por la administración autonómica.
+2. **Certificado digital**: El titular necesita un certificado digital reconocido (FNMT, DNIe, o certificado de persona jurídica).
+3. **Vínculo en portal autonómico**: El titular debe autorizar a la entidad habilitada (Nekazari) en el portal de su comunidad autónoma, registrando la tupla {NIF titular, CIF entidad habilitada, Cuaderno Comercial}.
+
+### Configuración en Nekazari
+
+1. Al crear la explotación, introduzca el número REGEPA en el campo `regepa`.
+2. El código provincial del REGEPA determina automáticamente el endpoint IUWS de su comunidad autónoma.
+3. Verifique que su provincia está configurada consultando `GET /api/modules/cue/endpoints-autonomicos`.
+
+### Flujo de envío a la administración
+
+1. Complete los registros del cuaderno (tratamientos, fertilizaciones, etc.)
+2. Ejecute `POST /api/modules/cue/validate` para verificar que todos los datos cumplen las normas SIEX.
+3. Corrija los errores detectados antes del envío.
+4. Cuando todo esté validado, proceda al envío a través del IUWS de su comunidad.
+5. Consulte periódicamente el estado del envío mediante `GET /IUWS/estado/{idTicket}`.
+
+### Entorno de pruebas (Sandbox)
+
+Antes de operar en producción, se recomienda probar el flujo completo en el entorno sandbox de su comunidad autónoma:
+
+| Comunidad | Sandbox URL |
+|-----------|-------------|
+| Navarra | `https://pac.navarra.es:8443` |
+| Aragón | `https://iuws.aragon.es` |
+| Cataluña | `https://iuws.catalunya.es` |
+| La Rioja | `https://iuws.larioja.es` |
+| País Vasco | `https://iuws.euskadi.eus` |
+
+Contacte con el servicio de informática de su comunidad para obtener credenciales de pruebas.
+
+---
+
+## Entidades y Catálogos SIEX
+
+### Entidades NGSI-LD del módulo
+
+| Entidad | Tipo | Origen | Estado |
+|---------|------|--------|--------|
+| `AgriFarm` | Explotación agrícola | FIWARE SDM | ✅ Completo |
+| `AgriParcel` | Unidad de producción | FIWARE SDM | ✅ Completo |
+| `AgriCropDeclaration` | Línea de declaración | Custom CUE | ✅ Completo |
+| `SigpacEnclosure` | Recinto SIGPAC | Custom CUE | ✅ Completo + PostGIS |
+| `AgriPestTreatment` | Tratamiento fitosanitario | FIWARE SDM | ✅ Completo |
+| `AgriFertilizerApplication` | Aplicación de fertilizante | FIWARE SDM | ✅ Completo |
+| `AgriIrrigation` | Riego | Custom CUE | 🔜 Próximamente |
+| `AgriHarvest` | Cosecha | Custom CUE | 🔜 Próximamente |
+| `AgriFertilizationPlan` | Plan de abonado | Custom CUE | 🔜 Obligatorio 1-sep-2026 |
+| `AgriSoilCharacterization` | Caracterización de suelos | Custom CUE | 🔜 v9 marzo 2026 |
+| `AgriEcoRegime` | Ecorrégimen | Custom CUE | 🔜 Próximamente |
+
+### Catálogos maestros
+
+| Catálogo | Fuente | Frecuencia de sincronización |
+|----------|--------|------------------------------|
+| ROPO (fitosanitarios) | MAPA — Registro Oficial de Productos y Operadores | Semanal (ETL) |
+| Fertilizantes | MAPA — Registro de Fertilizantes | Semanal (ETL) |
+| Endpoints autonómicos IUWS | Configuración de plataforma | Bajo demanda |
 
 ---
 

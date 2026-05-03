@@ -1,99 +1,108 @@
-# nkz-module-cue — Cuaderno de Campo de Explotación
+# nkz-module-cue — Cuaderno de Campo de Explotación (CUE) / Field Record Book
 
-Módulo SIEX del ecosistema Nekazari. Implementa el **Cuaderno de Explotación Único** conforme al Real Decreto 1054/2022 para explotaciones agrícolas en España.
+[![Backend](https://img.shields.io/badge/backend-%E2%9C%85%20Phase%202-brightgreen)]()
+[![Frontend](https://img.shields.io/badge/frontend-%E2%9C%85%20Phase%203-brightgreen)]()
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen)]()
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
+[![FIWARE](https://img.shields.io/badge/FIWARE-NGSI--LD-%23E60005)]()
 
-## Estado
+**SIEX-compliant digital farm record book for Spain** — implements the *Cuaderno de Explotacion Unico* mandated by Real Decreto 1054/2022 for all Spanish agricultural holdings. Part of the [Nekazari](https://github.com/nkz-os) modular FIWARE platform.
 
-**Fase 1 — Backend funcional.** API REST con CRUD NGSI-LD sobre Orion-LD y caché espacial PostGIS. Sin frontend todavía.
+Written in English, field-facing interfaces in Spanish.
 
-## Arquitectura
+---
 
-```
-Agricultor / App → API REST (Flask) → Orion-LD (lectura/escritura NGSI-LD)
-                                     → PostGIS (solo lectura espacial)
+## Architecture
 
-                    Orion-LD → suscripción → /notify → PostGIS (caché geometrías)
-```
-
-- **Orion-LD** es la fuente de verdad de todas las entidades del cuaderno (AgriFarm, AgriParcel, AgriCropDeclaration, SigpacEnclosure)
-- **PostGIS** es una caché espacial de solo lectura para las geometrías de los recintos SIGPAC. Se puebla exclusivamente mediante webhook de suscripción desde Orion-LD. **La API nunca escribe directamente en PostGIS.**
-- **API Flask** actúa como pasarela: valida, construye payloads NGSI-LD y escribe en Orion-LD. Para consultas espaciales, lee de PostGIS.
-
-## Modelo de datos (entidades NGSI-LD)
+The module follows the **NGSI-LD Source-of-Truth Architecture (SOTA)** pattern:
 
 ```
-AgriFarm (Explotación)
-  └─1:N─▶ AgriParcel (Unidad de producción)
-            └─1:N─▶ AgriCropDeclaration (Línea de declaración)
-                      └─1:N─▶ SigpacEnclosure (Recinto SIGPAC) ◀── geometría en PostGIS
+                    ┌──────────────────────────────────────────┐
+                    │           End User (Farmer / API)        │
+                    └────────────────────┬─────────────────────┘
+                                         │ HTTPS
+                                         ▼
+                ┌──────────────────────────────────────────────┐
+                │           API Gateway (ingress)              │
+                │      https://nkz.robotika.cloud              │
+                │   routes /api/modules/cue/*  →  CUE Backend  │
+                └────────────────────┬─────────────────────────┘
+                                     │
+                                     ▼
+           ┌──────────────────────────────────────────────────┐
+           │              CUE Backend (Flask :5000)           │
+           │                                                   │
+           │  ┌──────────┐  ┌───────────┐  ┌──────────────┐   │
+           │  │  Auth     │  │ Orion-LD  │  │  PostGIS     │   │
+           │  │  JWT      │  │ Client    │  │  Reader      │   │
+           │  └──────────┘  └─────┬─────┘  └──────┬───────┘   │
+           └──────────────────────┼────────────────┼───────────┘
+                                  │                │
+                    ┌─────────────▼──────┐   ┌─────▼──────────┐
+                    │    Orion-LD        │   │    PostGIS      │
+                    │  (Context Broker)  │   │ (Spatial Cache) │
+                    │  Source of Truth   │   │ Read-only       │
+                    │  for all entities  │   │ Geometry index  │
+                    └─────────┬──────────┘   └────────┬────────┘
+                              │                       │
+                              └────── subscribe ──────┘
+                                  POST /notify (webhook)
 ```
 
-| Entidad | Tipo NGSI-LD | Origen |
-|---------|-------------|--------|
-| `AgriFarm` | SDM (FIWARE Smart Data Model) | `dataModel.Agrifood/AgriFarm` |
-| `AgriParcel` | SDM | `dataModel.Agrifood/AgriParcel` |
-| `AgriCropDeclaration` | Custom (CUE) | `@context` propio del módulo |
-| `SigpacEnclosure` | Custom (CUE) | `@context` propio del módulo, geometría en PostGIS |
+### Data flow principles
 
-El `@context` custom se sirve en `/ngsi-ld/cue-context.jsonld` y define los atributos específicos del cuaderno de campo español.
+1. **All writes** go through the CUE Backend API which validates and creates NGSI-LD entities in **Orion-LD** (the canonical source of truth).
+2. **SigpacEnclosure geometries** are synced to **PostGIS** via an Orion-LD subscription webhook (`POST /notify`) for efficient spatial queries.
+3. **Spatial reads** (GeoJSON geometry queries) hit PostGIS directly for performance; all other reads query Orion-LD.
+4. The **API Gateway** terminates HTTPS, injects the tenant context via `X-Tenant-ID`, and forwards to the backend service.
 
-## API REST — Endpoints
+---
 
-Todos bajo `/api/modules/cue`. Autenticación JWT requerida (`@require_auth`). El tenant se extrae de la cabecera `X-Tenant-ID` (establecida por el API Gateway).
+## Entity Model
 
-### Explotaciones (AgriFarm)
+```
+AgriFarm (Explotacion Agricola)
+ │
+ ├── 1:N ── AgriParcel (Unidad de Produccion)
+ │            │
+ │            └── 1:N ── AgriCropDeclaration (Linea de Declaracion)
+ │                         │
+ │                         └── 1:N ── SigpacEnclosure (Recinto SIGPAC)
+ │                                        └── geometry synced to PostGIS
+ │
+ ├── 1:N ── AgriPestTreatment (Tratamiento Fitosanitario)
+ │            └── references ROPO catalog (via numero_registro)
+ │
+ ├── 1:N ── AgriFertilizerApplication (Aplicacion de Fertilizante)
+ │            └── references Fertilizantes catalog
+ │
+ └── (future: AgriIrrigation, AgriHarvest, AgriFertilizationPlan, ...)
+```
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/explotaciones?municipio=&nombre=` | Listar explotaciones del tenant. Filtros opcionales por municipio y nombre |
-| `POST` | `/explotaciones` | Crear explotación |
-| `GET` | `/explotaciones/<id>` | Obtener explotación |
-| `PUT` | `/explotaciones/<id>` | Actualizar explotación |
-| `DELETE` | `/explotaciones/<id>` | Baja lógica (isActive=false) |
+### NGSI-LD entity catalog
 
-### Unidades de producción (AgriParcel)
+| Entity | NGSI-LD Type | Source | Status |
+|--------|-------------|--------|--------|
+| `AgriFarm` | `https://.../AgriFarm` | FIWARE Smart Data Model | ✅ |
+| `AgriParcel` | `https://.../AgriParcel` | FIWARE Smart Data Model | ✅ |
+| `AgriCropDeclaration` | `https://.../AgriCropDeclaration` | Custom (CUE) | ✅ |
+| `SigpacEnclosure` | `https://.../SigpacEnclosure` | Custom (CUE) + PostGIS | ✅ |
+| `AgriPestTreatment` | `https://.../AgriPestTreatment` | FIWARE Smart Data Model | ✅ |
+| `AgriFertilizerApplication` | `https://.../AgriFertilizerApplication` | FIWARE Smart Data Model | ✅ |
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/explotaciones/<id>/parcelas` | Listar parcelas de una explotación |
-| `POST` | `/parcelas` | Crear parcela |
-| `GET` | `/parcelas/<id>` | Obtener parcela |
-| `PUT` | `/parcelas/<id>` | Actualizar parcela |
-| `DELETE` | `/parcelas/<id>` | Baja lógica |
+Custom entity types and attributes are defined in the module-specific `@context` served at `GET /ngsi-ld/cue-context.jsonld`.
 
-### Líneas de declaración (AgriCropDeclaration)
+---
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/parcelas/<id>/declaraciones` | Listar declaraciones de una parcela |
-| `POST` | `/declaraciones` | Crear declaración |
-| `POST` | `/declaraciones/<id>/duplicar` | Duplicar declaración para nueva campaña |
-| `GET` | `/declaraciones/<id>` | Obtener declaración |
-| `PUT` | `/declaraciones/<id>` | Actualizar declaración |
-| `DELETE` | `/declaraciones/<id>` | Baja lógica |
+## Quick Start
 
-### Recintos SIGPAC (SigpacEnclosure)
+### Prerequisites
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/declaraciones/<id>/recintos` | Listar recintos con geometrías GeoJSON (desde PostGIS) |
-| `POST` | `/recintos` | Crear recinto individual |
-| `POST` | `/recintos/batch` | Crear múltiples recintos en lote |
-| `GET` | `/recintos/<id>` | Obtener recinto con geometría GeoJSON |
-| `PUT` | `/recintos/<id>` | Actualizar recinto |
-| `DELETE` | `/recintos/<id>` | Baja lógica |
+- Nekazari platform with Orion-LD and PostGIS enabled
+- JWT token for a valid tenant (Farmer or TenantAdmin role)
+- `X-Tenant-ID` header set to the tenant identifier
 
-### Infraestructura (rutas raíz, sin prefijo)
-
-| Método | Ruta | Auth | Descripción |
-|--------|------|------|-------------|
-| `GET` | `/health` | No | Health check para K8s |
-| `GET` | `/ngsi-ld/cue-context.jsonld` | No | `@context` JSON-LD para entidades custom |
-| `POST` | `/notify` | No | Webhook de suscripción Orion-LD → PostGIS |
-
-## Ejemplos de uso
-
-### Crear una explotación
+### Create a farm
 
 ```bash
 curl -X POST https://nkz.robotika.cloud/api/modules/cue/explotaciones \
@@ -105,11 +114,12 @@ curl -X POST https://nkz.robotika.cloud/api/modules/cue/explotaciones \
     "municipio": "Tudela",
     "provincia": "Navarra",
     "nif": "12345678Z",
-    "coordenadas": [-1.6, 42.1]
+    "coordenadas": [-1.6, 42.1],
+    "regepa": "NA12345"
   }'
 ```
 
-### Crear recintos en lote
+### Create enclosures in batch
 
 ```bash
 curl -X POST https://nkz.robotika.cloud/api/modules/cue/recintos/batch \
@@ -131,79 +141,129 @@ curl -X POST https://nkz.robotika.cloud/api/modules/cue/recintos/batch \
   }'
 ```
 
-### Duplicar una declaración para la campaña siguiente
+### Validate records before submission
 
 ```bash
-curl -X POST https://nkz.robotika.cloud/api/modules/cue/declaraciones/abc123/duplicar \
+curl -X POST https://nkz.robotika.cloud/api/modules/cue/validate \
   -H "Authorization: Bearer <jwt>" \
   -H "X-Tenant-ID: mi-explotacion" \
   -H "Content-Type: application/json" \
-  -d '{"campanya": 2026}'
+  -d '{"explotacion_id": "<farm_id>"}'
 ```
 
-### Filtrar explotaciones por municipio
+Detailed usage instructions: [MANUAL.md](MANUAL.md) (Spanish).
 
-```bash
-curl "https://nkz.robotika.cloud/api/modules/cue/explotaciones?municipio=Tudela" \
-  -H "Authorization: Bearer <jwt>" \
-  -H "X-Tenant-ID: mi-explotacion"
-```
+---
 
-## Estructura del proyecto
+## API Overview
+
+All endpoints under `/api/modules/cue`. Authentication: JWT Bearer + `X-Tenant-ID`.
+
+| Resource | Methods | Description |
+|----------|---------|-------------|
+| `/explotaciones` | GET, POST | List / create farms |
+| `/explotaciones/<id>` | GET, PUT, DELETE | Read / update / soft-delete farm |
+| `/explotaciones/<id>/parcelas` | GET | List parcels by farm |
+| `/parcelas` | POST | Create parcel |
+| `/parcelas/<id>` | GET, PUT, DELETE | Read / update / soft-delete parcel |
+| `/parcelas/<id>/declaraciones` | GET | List declarations by parcel |
+| `/declaraciones` | POST | Create declaration |
+| `/declaraciones/<id>` | GET, PUT, DELETE | Read / update / soft-delete |
+| `/declaraciones/<id>/duplicar` | POST | Duplicate for new campaign year |
+| `/declaraciones/<id>/recintos` | GET | List enclosures with GeoJSON geometries |
+| `/recintos` | POST | Create single enclosure |
+| `/recintos/batch` | POST | Batch-create enclosures |
+| `/recintos/<id>` | GET, PUT, DELETE | Read / update / soft-delete enclosure |
+| `/tratamientos` | GET, POST | List / create phytosanitary treatments |
+| `/tratamientos/<id>` | GET, PUT, DELETE | Read / update / soft-delete treatment |
+| `/fertilizaciones` | GET, POST | List / create fertilizer applications |
+| `/fertilizaciones/<id>` | GET, PUT, DELETE | Read / update / soft-delete application |
+| `/productos-ropo` | GET | List ROPO catalog (phytosanitary products) |
+| `/productos-ropo/<num>` | GET | Lookup product by registration number |
+| `/productos-fertilizantes` | GET | List fertilizer catalog |
+| `/productos-fertilizantes/<num>` | GET | Lookup fertilizer by registration number |
+| `/endpoints-autonomicos` | GET | List autonomous community IUWS endpoints |
+| `/endpoints-autonomicos/<codigo>` | GET | Lookup endpoint by province code |
+| `/validate` | POST | Validate all records against SIEX business rules |
+| `/health` | GET | Health check (no auth, for K8s probes) |
+
+### Infrastructure routes (no `/api/modules/cue` prefix)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/ngsi-ld/cue-context.jsonld` | Custom `@context` for CUE entity types |
+| POST | `/notify` | Orion-LD subscription webhook → PostGIS sync |
+
+---
+
+## Implementation Phases
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **1. Foundation** | NGSI-LD CRUD API, PostGIS spatial cache, JWT auth, K8s deployment, CI/CD | ✅ Complete |
+| **2. Core** | Business rules engine, ETL ROPO+Fertilizantes (SCD Type 2), POST /validate, SIEX vocabulary | ✅ Complete |
+| **3. Frontend** | React IIFE module, entity forms, CesiumJS map, SIGPAC enclosure layer, catalog selectors | ✅ Complete |
+| **4. Integration** | SITNA / IUWS client, XAdES/CAdES digital signature, REA state machine, automated submission | 🔜 Pending |
+| **5. Audit** | Full security review, penetration testing, regulatory compliance verification | 🔜 Pending |
+
+---
+
+## Project Structure
 
 ```
 nkz-module-cue/
-├── manifest.json              # Registro del módulo en Nekazari
-├── README.md                  # Este documento
-├── MANUAL.md                  # Manual de uso en castellano
+├── manifest.json              # Module registration (id: "cue")
+├── README.md                  # This file
+├── MANUAL.md                  # Spanish user manual
 ├── backend/
-│   ├── Dockerfile             # Python 3.11-alpine, psycopg2
-│   ├── requirements.txt       # Flask + psycopg2 + PyJWT + requests
-│   ├── pytest.ini
-│   ├── migrations/
-│   │   └── 001_create_cue_recinto_sigpac.sql
+│   ├── Dockerfile             # Python 3.11-alpine
+│   ├── requirements.txt
+│   ├── migrations/            # 001, 002, 003 SQL migrations
 │   ├── tests/
-│   │   └── test_api.py
 │   └── app/
-│       ├── cue_api.py         # Aplicación Flask + 27 rutas
-│       ├── auth_middleware.py  # Decorador @require_auth (confía en API Gateway)
-│       ├── orion_client.py    # Cliente NGSI-LD CRUD (Orion-LD)
+│       ├── cue_api.py         # Flask application (40+ routes)
+│       ├── auth_middleware.py # JWT validation decorator
+│       ├── orion_client.py    # NGSI-LD CRUD wrapper
 │       ├── orion_sync.py      # Webhook /notify → PostGIS
 │       └── common/
-│           └── tenant_utils.py # Normalización y validación de tenant_id
+├── src/                       # Frontend (React IIFE module)
+│   ├── moduleEntry.ts
+│   ├── components/            # ExplotacionForm, RecintoForm, TratamientoForm, etc.
+│   ├── services/              # cueApi.ts
+│   ├── slots/                 # CUE viewer slot registration
+│   └── locales/               # i18n (Spanish, English)
 ├── k8s/
 │   └── backend-deployment.yaml
 ├── .github/workflows/
-│   └── build-push.yml
-└── .gitignore
+│   └── build-push.yml         # CI: test + Docker build/push to GHCR
+└── vite.config.ts             # IIFE bundle configuration
 ```
 
-## Requisitos para despliegue
+---
 
-- **PostGIS** habilitado en la instancia TimescaleDB del cluster (`CREATE EXTENSION IF NOT EXISTS postgis`)
-- **Orion-LD** en ejecución (ya en producción)
-- **API Gateway** con rutas:
-  - `/api/modules/cue/*` → `cue-backend-service:5000`
-  - `/ngsi-ld/cue-context.jsonld` → `cue-backend-service:5000`
-- **Suscripción Orion-LD** para entidades `SigpacEnclosure` → `http://cue-backend-service:5000/notify`
-- **Variables de entorno** (desde ConfigMap/Secrets):
-  - `POSTGRES_URL` (desde `postgresql-secret`)
-  - `ORION_URL` (por defecto `http://orion-service:1026`)
-  - `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `JWT_AUDIENCE`
-  - `CONTEXT_URL`, `CUE_CONTEXT_URL`
+## Deployment Requirements
 
-## Fases de desarrollo
+- **PostGIS** extension in TimescaleDB
+- **Orion-LD** Context Broker (running in cluster)
+- **API Gateway** routes: `/api/modules/cue/*` → `cue-backend-service:5000`
+- **Orion-LD subscription**: `SigpacEnclosure` → `http://cue-backend-service:5000/notify`
+- **Env vars**: `POSTGRES_URL`, `ORION_URL`, `KEYCLOAK_URL`, `CONTEXT_URL`, `CUE_CONTEXT_URL`
 
-| Fase | Alcance | Estado |
-|------|---------|--------|
-| **1. Fundación** | API CRUD NGSI-LD, caché PostGIS, auth, K8s, CI/CD | ✅ Completada |
-| **2. Core** | Motor de reglas, ETL ROPO/Fertilizantes, serializador XSD | Pendiente |
-| **3. Frontend** | Módulo IIFE, formularios, mapa Cesium, selectores | Pendiente |
-| **4. Integración** | Cliente SITNA, firma XAdES/CAdES, REA, máquina de estados | Pendiente |
-| **5. Auditoría** | Revisión de seguridad completa | Pendiente |
+Internal service URLs (cluster-internal, adjust per deployment):
+- `ORION_URL`: `http://orion-ld-service:1026`
+- `CUE Backend`: `cue-backend-service:5000`
+- `CONTEXT_URL`: `http://api-gateway-service:5000/ngsi-ld-context.jsonld`
 
-## Licencia
+---
 
-AGPL-3.0. Copyright © Nekazari — robotika.cloud.
+## License
 
-Potenciado por FIWARE Smart Data Models y el estándar NGSI-LD (ETSI ISG CIM).
+**AGPL-3.0** — Copyright (c) Nekazari / robotika.cloud.
+
+Powered by [FIWARE](https://www.fiware.org) Smart Data Models and the NGSI-LD standard (ETSI ISG CIM).
+
+Built for the Spanish SIEX (Sistema de Informacion de Explotaciones Agricolas) ecosystem, compliant with:
+
+- **Real Decreto 1054/2022** — Digital farm record book (CUE)
+- **Real Decreto 1048/2022** — Fertilization planning
+- **Orden APA/.../2024** — SIEX technical specifications (v9+)
