@@ -60,6 +60,14 @@ def cue_context():
             "AgriCropDeclaration": "urn:ngsi-ld:AgriCropDeclaration",
             "SigpacEnclosure": "urn:ngsi-ld:SigpacEnclosure",
 
+            "AgriPestTreatment": "https://smart-data-models.github.io/dataModel.Agrifood/AgriPestTreatment/context.jsonld",
+            "AgriFertilizerApplication": "https://smart-data-models.github.io/dataModel.Agrifood/AgriFertilizerApplication/context.jsonld",
+            "AgriIrrigation": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriIrrigation",
+            "AgriHarvest": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriHarvest",
+            "AgriFertilizationPlan": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriFertilizationPlan",
+            "AgriSoilCharacterization": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriSoilCharacterization",
+            "AgriEcoRegime": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriEcoRegime",
+
             "campaignYear": {
                 "@type": "Property",
                 "@id": "urn:ngsi-ld:AgriCropDeclaration:campaignYear"
@@ -100,6 +108,29 @@ def cue_context():
                 "@type": "Property",
                 "@id": "urn:ngsi-ld:tenantId"
             },
+
+            # Phase 2 — Anexo V attributes
+            "productoROPORef": {"@type": "Property"},
+            "dosisAplicada": {"@type": "Property", "unitCode": "L/ha"},
+            "plagaObjeto": {"@type": "Property"},
+            "equipoAplicacion": {"@type": "Property"},
+            "aplicador": {"@type": "Property"},
+            "horaAplicacion": {"@type": "Property"},
+            "tipoFertilizante": {"@type": "Property"},
+            "dosisFertilizante": {"@type": "Property", "unitCode": "kg/ha"},
+            "contenidoN": {"@type": "Property", "unitCode": "%"},
+            "contenidoP": {"@type": "Property", "unitCode": "%"},
+            "volumenRiego": {"@type": "Property", "unitCode": "m3"},
+            "sistemaRiego": {"@type": "Property"},
+            "produccionCosecha": {"@type": "Property", "unitCode": "kg"},
+            "calidadCosecha": {"@type": "Property"},
+            "destinoCosecha": {"@type": "Property"},
+            "tipoAbono": {"@type": "Property"},
+            "dosisAbono": {"@type": "Property", "unitCode": "kg/ha"},
+            "texturaSuelo": {"@type": "Property"},
+            "phSuelo": {"@type": "Property"},
+            "materiaOrganica": {"@type": "Property", "unitCode": "%"},
+            "ecoregimenTipo": {"@type": "Property"},
 
             "hasAgriParcel": {
                 "@type": "@id",
@@ -974,6 +1005,230 @@ def delete_recinto(enclosure_id):
     if status not in (200, 204):
         return jsonify({'error': resp}), status
     return jsonify({'status': 'deleted', 'id': enclosure_id})
+
+
+# =========================================================================
+# AGRIPESTTREATMENT ROUTES (mandatory since 1-ene-2026)
+# =========================================================================
+
+@cue_bp.route('/tratamientos', methods=['GET'])
+@require_auth
+def list_tratamientos():
+    """List AgriPestTreatment entities for current tenant with optional filters."""
+    tenant = get_current_tenant()
+    parcela_id = request.args.get('parcela_id')
+    q_parts = [_tenant_filter(), 'isActive!=false']
+    if parcela_id:
+        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
+    q = ';'.join(q_parts)
+    status, result = query_entities('AgriPestTreatment', tenant, {'q': q})
+    if status == 200:
+        return jsonify(result), 200
+    return jsonify(result), status
+
+
+@cue_bp.route('/tratamientos', methods=['POST'])
+@require_auth
+def create_tratamiento():
+    """Create an AgriPestTreatment entity in Orion-LD."""
+    data = request.json or {}
+    tenant = get_current_tenant()
+    tratamiento_id = data.get('id') or _generate_id()
+
+    attributes = {
+        "name": _property(data.get('nombre', '')),
+        "productoROPORef": _property(data.get('producto_ropo', '')),
+        "dosisAplicada": _property({
+            "value": data.get('dosis', 0),
+            "unitCode": data.get('unidad_dosis', 'L/ha')
+        }),
+        "plagaObjeto": _property(data.get('plaga', '')),
+        "equipoAplicacion": _property(data.get('equipo', '')),
+        "aplicador": _property(data.get('aplicador', '')),
+        "horaAplicacion": _property(data.get('hora', '')),
+        "dateObserved": _property(data.get('fecha', '')),
+        "tenantId": _property(tenant),
+        "version": _property(1),
+        "isActive": _property(True),
+    }
+
+    parcela_id = data.get('parcela_id')
+    if parcela_id:
+        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        attributes['hasAgriParcel'] = _relationship(parcela_uri)
+
+    status, result = create_entity('AgriPestTreatment', tenant, tratamiento_id, attributes)
+    return jsonify(result), status if status in (200, 201) else status
+
+
+@cue_bp.route('/tratamientos/<tratamiento_id>', methods=['GET'])
+@require_auth
+def get_tratamiento(tratamiento_id):
+    """Get an AgriPestTreatment entity by ID."""
+    tenant = get_current_tenant()
+    status, result = get_entity('AgriPestTreatment', tenant, tratamiento_id)
+    return jsonify(result), status
+
+
+@cue_bp.route('/tratamientos/<tratamiento_id>', methods=['PUT'])
+@require_auth
+def update_tratamiento(tratamiento_id):
+    """Update an AgriPestTreatment entity."""
+    data = request.json or {}
+    tenant = get_current_tenant()
+    attributes = {}
+
+    for key, ngsi_key in [
+        ('nombre', 'name'),
+        ('producto_ropo', 'productoROPORef'),
+        ('plaga', 'plagaObjeto'),
+        ('equipo', 'equipoAplicacion'),
+        ('aplicador', 'aplicador'),
+        ('hora', 'horaAplicacion'),
+        ('fecha', 'dateObserved'),
+    ]:
+        if key in data:
+            attributes[ngsi_key] = _property(data[key])
+
+    if 'dosis' in data:
+        attributes['dosisAplicada'] = _property({
+            "value": data['dosis'],
+            "unitCode": data.get('unidad_dosis', 'L/ha')
+        })
+
+    status, result = update_entity('AgriPestTreatment', tenant, tratamiento_id, attributes)
+    if status == 204:
+        return jsonify({'status': 'updated'}), 200
+    return jsonify(result), status
+
+
+@cue_bp.route('/tratamientos/<tratamiento_id>', methods=['DELETE'])
+@require_auth
+def delete_tratamiento(tratamiento_id):
+    """Soft-delete an AgriPestTreatment."""
+    tenant = get_current_tenant()
+    status, result = delete_entity('AgriPestTreatment', tenant, tratamiento_id)
+    if status == 204:
+        return jsonify({'status': 'deleted'}), 200
+    return jsonify(result), status
+
+
+# =========================================================================
+# AGRIFERTILIZERAPPLICATION ROUTES (mandatory since 1-ene-2026)
+# =========================================================================
+
+@cue_bp.route('/fertilizaciones', methods=['GET'])
+@require_auth
+def list_fertilizaciones():
+    """List AgriFertilizerApplication entities for current tenant."""
+    tenant = get_current_tenant()
+    parcela_id = request.args.get('parcela_id')
+    q_parts = [_tenant_filter(), 'isActive!=false']
+    if parcela_id:
+        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
+    q = ';'.join(q_parts)
+    status, result = query_entities('AgriFertilizerApplication', tenant, {'q': q})
+    if status == 200:
+        return jsonify(result), 200
+    return jsonify(result), status
+
+
+@cue_bp.route('/fertilizaciones', methods=['POST'])
+@require_auth
+def create_fertilizacion():
+    """Create an AgriFertilizerApplication entity in Orion-LD."""
+    data = request.json or {}
+    tenant = get_current_tenant()
+    fertilizacion_id = data.get('id') or _generate_id()
+
+    attributes = {
+        "name": _property(data.get('nombre', '')),
+        "tipoFertilizante": _property(data.get('tipo', '')),
+        "dosisFertilizante": _property({
+            "value": data.get('dosis_kg_ha', 0),
+            "unitCode": "kg/ha"
+        }),
+        "contenidoN": _property({
+            "value": data.get('contenido_n_pct', 0),
+            "unitCode": "%"
+        }),
+        "contenidoP": _property({
+            "value": data.get('contenido_p_pct', 0),
+            "unitCode": "%"
+        }),
+        "dateObserved": _property(data.get('fecha', '')),
+        "tenantId": _property(tenant),
+        "version": _property(1),
+        "isActive": _property(True),
+    }
+
+    parcela_id = data.get('parcela_id')
+    if parcela_id:
+        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        attributes['hasAgriParcel'] = _relationship(parcela_uri)
+
+    status, result = create_entity('AgriFertilizerApplication', tenant, fertilizacion_id, attributes)
+    return jsonify(result), status if status in (200, 201) else status
+
+
+@cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['GET'])
+@require_auth
+def get_fertilizacion(fertilizacion_id):
+    """Get an AgriFertilizerApplication entity by ID."""
+    tenant = get_current_tenant()
+    status, result = get_entity('AgriFertilizerApplication', tenant, fertilizacion_id)
+    return jsonify(result), status
+
+
+@cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['PUT'])
+@require_auth
+def update_fertilizacion(fertilizacion_id):
+    """Update an AgriFertilizerApplication entity."""
+    data = request.json or {}
+    tenant = get_current_tenant()
+    attributes = {}
+
+    for key, ngsi_key in [
+        ('nombre', 'name'),
+        ('tipo', 'tipoFertilizante'),
+        ('fecha', 'dateObserved'),
+    ]:
+        if key in data:
+            attributes[ngsi_key] = _property(data[key])
+
+    if 'dosis_kg_ha' in data:
+        attributes['dosisFertilizante'] = _property({
+            "value": data['dosis_kg_ha'],
+            "unitCode": "kg/ha"
+        })
+    if 'contenido_n_pct' in data:
+        attributes['contenidoN'] = _property({
+            "value": data['contenido_n_pct'],
+            "unitCode": "%"
+        })
+    if 'contenido_p_pct' in data:
+        attributes['contenidoP'] = _property({
+            "value": data['contenido_p_pct'],
+            "unitCode": "%"
+        })
+
+    status, result = update_entity('AgriFertilizerApplication', tenant, fertilizacion_id, attributes)
+    if status == 204:
+        return jsonify({'status': 'updated'}), 200
+    return jsonify(result), status
+
+
+@cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['DELETE'])
+@require_auth
+def delete_fertilizacion(fertilizacion_id):
+    """Soft-delete an AgriFertilizerApplication."""
+    tenant = get_current_tenant()
+    status, result = delete_entity('AgriFertilizerApplication', tenant, fertilizacion_id)
+    if status == 204:
+        return jsonify({'status': 'deleted'}), 200
+    return jsonify(result), status
 
 
 # ===========================================================================

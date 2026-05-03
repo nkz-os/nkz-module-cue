@@ -29,6 +29,8 @@ DEFAULT_CONTEXTS = [
 SDM_CONTEXTS = {
     'AgriFarm': "https://smart-data-models.github.io/dataModel.Agrifood/AgriFarm/context.jsonld",
     'AgriParcel': "https://smart-data-models.github.io/dataModel.Agrifood/AgriParcel/context.jsonld",
+    'AgriPestTreatment': "https://smart-data-models.github.io/dataModel.Agrifood/AgriPestTreatment/context.jsonld",
+    'AgriFertilizerApplication': "https://smart-data-models.github.io/dataModel.Agrifood/AgriFertilizerApplication/context.jsonld",
 }
 
 

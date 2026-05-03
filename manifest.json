@@ -21,7 +21,13 @@
       "/declaraciones/:id",
       "/declaraciones/:id/recintos",
       "/recintos",
-      "/recintos/:id"
+      "/recintos/:id",
+      "/tratamientos",
+      "/tratamientos/:id",
+      "/fertilizaciones",
+      "/fertilizaciones/:id",
+      "/endpoints-autonomicos",
+      "/endpoints-autonomicos/:codigo"
     ]
   },
   "frontend": {
