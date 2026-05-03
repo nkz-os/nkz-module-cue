@@ -33,7 +33,10 @@
       "/productos-fertilizantes",
       "/productos-fertilizantes/:id",
       "/validate",
-      "/serialize/:id"
+      "/serialize/:id",
+      "/submit/:id",
+      "/submission/:id",
+      "/rea/:id"
     ]
   },
   "frontend": {
