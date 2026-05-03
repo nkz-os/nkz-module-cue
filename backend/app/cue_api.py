@@ -20,6 +20,11 @@ from .orion_client import (
     create_entity, get_entity, query_entities, update_entity, delete_entity,
 )
 from .orion_sync import process_notification, POSTGRES_URL
+from .serializers.siex_serializer import (
+    serialize_explotacion_to_xml,
+    validate_against_xsd,
+    _get_ngsi_value,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1442,6 +1447,112 @@ def validate_tratamiento_endpoint():
 # ===========================================================================
 # Register blueprint
 # ===========================================================================
+
+# =========================================================================
+# SERIALIZATION ENDPOINT (Anti-Corruption Layer)
+# =========================================================================
+
+@cue_bp.route('/serialize/<farm_id>', methods=['GET'])
+@require_auth
+def serialize_explotacion(farm_id):
+    """
+    Serialize an entire explotacion (farm + parcels + enclosures + treatments
+    + fertilizations) into a SIEX-compliant XML document.
+
+    Query params:
+        tipo: 'Alta' (default), 'Modificacion', or 'Anulacion'
+        trace_id: original csv_trace_id (required for Modificacion/Anulacion)
+        motivo: reason for cancellation (required for Anulacion)
+        validate: 'true' (default) or 'false' — run XSD validation
+    """
+    tenant = get_current_tenant()
+    payload_type = request.args.get('tipo', 'Alta')
+    do_validate = request.args.get('validate', 'true').lower() != 'false'
+    trace_id = request.args.get('trace_id')
+    motivo = request.args.get('motivo')
+
+    if payload_type not in ('Alta', 'Modificacion', 'Anulacion'):
+        return jsonify({'error': 'Tipo debe ser Alta, Modificacion o Anulacion'}), 400
+
+    try:
+        # 1. Fetch farm from Orion-LD
+        status, farm = get_entity('AgriFarm', tenant, farm_id)
+        if status != 200:
+            return jsonify({'error': f'Explotación no encontrada (status {status})'}), 404
+
+        # 2. Fetch parcelas for this farm
+        farm_uri = _entity_uri('AgriFarm', tenant, farm_id)
+        _, parcelas = query_entities(
+            'AgriParcel', tenant,
+            {'q': f'hasAgriFarm=="{farm_uri}";isActive!=false'}
+        )
+        parcelas = parcelas if isinstance(parcelas, list) else []
+
+        # 3. Fetch enclosures for all parcelas
+        enclosures = []
+        for p in parcelas:
+            p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
+            if p_id:
+                p_uri = _entity_uri('AgriParcel', tenant, p_id)
+                _, encs = query_entities(
+                    'SigpacEnclosure', tenant,
+                    {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
+                )
+                enclosures.extend(encs if isinstance(encs, list) else [])
+
+        # 4. Fetch treatments for all parcelas
+        treatments = []
+        for p in parcelas:
+            p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
+            if p_id:
+                p_uri = _entity_uri('AgriParcel', tenant, p_id)
+                _, trts = query_entities(
+                    'AgriPestTreatment', tenant,
+                    {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
+                )
+                treatments.extend(trts if isinstance(trts, list) else [])
+
+        # 5. Fetch fertilizations for all parcelas
+        fertilizations = []
+        for p in parcelas:
+            p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
+            if p_id:
+                p_uri = _entity_uri('AgriParcel', tenant, p_id)
+                _, ferts = query_entities(
+                    'AgriFertilizerApplication', tenant,
+                    {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
+                )
+                fertilizations.extend(ferts if isinstance(ferts, list) else [])
+
+        # 6. Generate XML
+        xml_str = serialize_explotacion_to_xml(
+            farm, parcelas, enclosures, treatments, fertilizations,
+            payload_type=payload_type,
+            original_trace_id=trace_id,
+            motivo_anulacion=motivo,
+        )
+
+        # 7. Validate if requested
+        validation_result = None
+        if do_validate:
+            valid, err = validate_against_xsd(xml_str, payload_type)
+            validation_result = {'valid': valid, 'error': err if not valid else None}
+
+        return jsonify({
+            'farm_id': farm_id,
+            'tipo': payload_type,
+            'parcelas': len(parcelas),
+            'recintos': len(enclosures),
+            'tratamientos': len(treatments),
+            'fertilizaciones': len(fertilizations),
+            'xml': xml_str,
+            'xsd_validation': validation_result,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Serialization error for farm {farm_id}: {e}", exc_info=True)
+        return jsonify({'error': f'Error de serialización: {str(e)}'}), 500
+
 
 app.register_blueprint(cue_bp)
 
