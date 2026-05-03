@@ -203,6 +203,28 @@ def _generate_id():
     return os.urandom(8).hex()
 
 
+def _get_iuws_endpoint(codigo_provincia):
+    """Resolve IUWS endpoint URL for a given province code."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT iuws_base_url, sandbox_url, comunidad "
+            "FROM cue_endpoints_autonomicos "
+            "WHERE codigo_provincia = %s AND activo = true",
+            (codigo_provincia,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        logger.error(f"Error resolving IUWS endpoint for provincia {codigo_provincia}: {e}")
+        return None
+
+
 # ===========================================================================
 # AgriFarm routes
 # ===========================================================================
@@ -227,6 +249,42 @@ def list_explotaciones():
     if status != 200:
         return jsonify({'error': data}), status
     return jsonify(data)
+
+
+# ===========================================================================
+# IUWS endpoint routing (infrastructure configuration)
+# ===========================================================================
+
+
+@cue_bp.route('/endpoints-autonomicos', methods=['GET'])
+@require_auth
+def list_endpoints_autonomicos():
+    """List all configured IUWS endpoints."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT codigo_provincia, comunidad, iuws_base_url, sandbox_url, activo "
+            "FROM cue_endpoints_autonomicos "
+            "ORDER BY codigo_provincia"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify([dict(r) for r in rows]), 200
+    except Exception as e:
+        logger.error(f"Error listing autonomic endpoints: {e}")
+        return jsonify({'error': 'Error al consultar endpoints autonómicos'}), 500
+
+
+@cue_bp.route('/endpoints-autonomicos/<codigo_provincia>', methods=['GET'])
+@require_auth
+def get_endpoint_autonomico(codigo_provincia):
+    """Get IUWS endpoint for a specific province code."""
+    result = _get_iuws_endpoint(codigo_provincia)
+    if result:
+        return jsonify(result), 200
+    return jsonify({'error': f'No hay endpoint configurado para la provincia {codigo_provincia}'}), 404
 
 
 @cue_bp.route('/explotaciones', methods=['POST'])
