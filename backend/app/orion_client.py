@@ -109,7 +109,7 @@ def create_entity(
         return r.status_code, r.json() if r.text else {}
     except requests.RequestException as e:
         logger.error(f"Orion-LD create_entity error: {e}")
-        return 502, {"error": f"Orion-LD unreachable: {e}"}
+        return 502, {"error": f"Orion-LD inaccesible: {e}"}
 
 
 def get_entity(
@@ -151,7 +151,7 @@ def get_entity(
         return r.status_code, r.json() if r.text else {}
     except requests.RequestException as e:
         logger.error(f"Orion-LD get_entity error: {e}")
-        return 502, {"error": f"Orion-LD unreachable: {e}"}
+        return 502, {"error": f"Orion-LD inaccesible: {e}"}
 
 
 def get_entity_by_uri(
@@ -169,7 +169,7 @@ def get_entity_by_uri(
         return r.status_code, r.json() if r.text else {}
     except requests.RequestException as e:
         logger.error(f"Orion-LD get_entity_by_uri error: {e}")
-        return 502, {"error": f"Orion-LD unreachable: {e}"}
+        return 502, {"error": f"Orion-LD inaccesible: {e}"}
 
 
 def query_entities(
@@ -199,7 +199,7 @@ def query_entities(
         return r.status_code, r.json() if r.text else []
     except requests.RequestException as e:
         logger.error(f"Orion-LD query_entities error: {e}")
-        return 502, {"error": f"Orion-LD unreachable: {e}"}
+        return 502, {"error": f"Orion-LD inaccesible: {e}"}
 
 
 def update_entity(
@@ -229,7 +229,7 @@ def update_entity(
         return r.status_code, {}
     except requests.RequestException as e:
         logger.error(f"Orion-LD update_entity error: {e}")
-        return 502, {"error": f"Orion-LD unreachable: {e}"}
+        return 502, {"error": f"Orion-LD inaccesible: {e}"}
 
 
 def delete_entity(

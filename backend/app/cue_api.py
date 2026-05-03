@@ -124,7 +124,7 @@ def notify():
     """
     body = request.get_json(silent=True)
     if not body or 'data' not in body:
-        return jsonify({'status': 'error', 'message': 'Invalid notification body'}), 400
+        return jsonify({'status': 'error', 'message': 'Cuerpo de notificación inválido'}), 400
 
     entities = body.get('data', [])
     summary = process_notification(body)
@@ -162,32 +162,32 @@ def get_pg_conn():
 def _validate_polygon(geom):
     """Validate a GeoJSON Polygon. Returns (bool, error_message)."""
     if not isinstance(geom, dict):
-        return False, 'geometry must be a GeoJSON object'
+        return False, 'la geometría debe ser un objeto GeoJSON'
 
     if geom.get('type') != 'Polygon':
-        return False, 'geometry type must be Polygon'
+        return False, 'el tipo de geometría debe ser Polygon'
 
     coords = geom.get('coordinates')
     if not isinstance(coords, list) or not coords:
-        return False, 'coordinates must be a non-empty array'
+        return False, 'las coordenadas deben ser un array no vacío'
 
     ring = coords[0]
     if not isinstance(ring, list) or len(ring) < 4:
-        return False, 'Polygon must have at least 4 points (closed ring)'
+        return False, 'el polígono debe tener al menos 4 puntos (anillo cerrado)'
 
     if ring[0] != ring[-1]:
-        return False, 'Polygon exterior ring must be closed'
+        return False, 'el anillo exterior del polígono debe estar cerrado'
 
     for pt in ring:
         if not isinstance(pt, (list, tuple)) or len(pt) < 2:
-            return False, 'each coordinate must be [lon, lat]'
+            return False, 'cada coordenada debe ser [lon, lat]'
         lon, lat = pt[0], pt[1]
         if not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)):
-            return False, 'coordinates must be numeric'
+            return False, 'las coordenadas deben ser numéricas'
         if abs(lat) > 90:
-            return False, f'latitude {lat} out of range [-90, 90]'
+            return False, f'latitud {lat} fuera de rango [-90, 90]'
         if abs(lon) > 180:
-            return False, f'longitude {lon} out of range [-180, 180]'
+            return False, f'longitud {lon} fuera de rango [-180, 180]'
 
     return True, ''
 
@@ -204,9 +204,19 @@ def _generate_id():
 @cue_bp.route('/explotaciones', methods=['GET'])
 @require_auth
 def list_explotaciones():
-    """Query Orion-LD AgriFarm by tenant, filter isActive!=false."""
+    """List AgriFarm entities for current tenant with optional filters."""
     tenant = get_current_tenant()
-    q = f'{_tenant_filter()};isActive!=false'
+    q_parts = [_tenant_filter(), 'isActive!=false']
+
+    municipio = request.args.get('municipio')
+    if municipio:
+        q_parts.append(f'address.addressLocality=="{municipio}"')
+
+    nombre = request.args.get('nombre')
+    if nombre:
+        q_parts.append(f'name~="{nombre}"')
+
+    q = ';'.join(q_parts)
     status, data = query_entities('AgriFarm', tenant, {'q': q})
     if status != 200:
         return jsonify({'error': data}), status
@@ -220,7 +230,7 @@ def create_explotacion():
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     farm_id = _generate_id()
     attributes = {
@@ -278,7 +288,7 @@ def update_explotacion(farm_id):
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     attributes = {}
 
@@ -316,7 +326,7 @@ def update_explotacion(farm_id):
             attributes['ownedBy'] = _relationship('')
 
     if not attributes:
-        return jsonify({'error': 'No fields to update'}), 400
+        return jsonify({'error': 'No hay campos para actualizar'}), 400
 
     status, resp = update_entity('AgriFarm', tenant, farm_id, attributes)
     if status not in (200, 204):
@@ -361,7 +371,7 @@ def create_parcela():
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     parcel_id = _generate_id()
     attributes = {
@@ -412,7 +422,7 @@ def update_parcela(parcel_id):
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     attributes = {}
 
@@ -434,7 +444,7 @@ def update_parcela(parcel_id):
         )
 
     if not attributes:
-        return jsonify({'error': 'No fields to update'}), 400
+        return jsonify({'error': 'No hay campos para actualizar'}), 400
 
     status, resp = update_entity('AgriParcel', tenant, parcel_id, attributes)
     if status not in (200, 204):
@@ -479,7 +489,7 @@ def create_declaracion():
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     decl_id = _generate_id()
     attributes = {
@@ -526,7 +536,7 @@ def update_declaracion(decl_id):
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     attributes = {}
 
@@ -546,7 +556,7 @@ def update_declaracion(decl_id):
         )
 
     if not attributes:
-        return jsonify({'error': 'No fields to update'}), 400
+        return jsonify({'error': 'No hay campos para actualizar'}), 400
 
     status, resp = update_entity('AgriCropDeclaration', tenant, decl_id, attributes)
     if status not in (200, 204):
@@ -565,6 +575,63 @@ def delete_declaracion(decl_id):
     if status not in (200, 204):
         return jsonify({'error': resp}), status
     return jsonify({'status': 'deleted', 'id': decl_id})
+
+
+@cue_bp.route('/declaraciones/<decl_id>/duplicar', methods=['POST'])
+@require_auth
+def duplicar_declaracion(decl_id):
+    """Duplicate a crop declaration for a new campaign year."""
+    tenant = get_current_tenant()
+    data = request.json or {}
+
+    # Get the original declaration
+    status, original = get_entity('AgriCropDeclaration', tenant, decl_id)
+    if status != 200:
+        return jsonify({'error': f'Declaración no encontrada (status {status})'}), 404
+
+    # Determine target campaign year
+    nueva_campanya = data.get('campanya')
+    if not nueva_campanya:
+        campanya_actual = original.get('campaignYear')
+        if isinstance(campanya_actual, dict):
+            campanya_actual = campanya_actual.get('value', 2026)
+        nueva_campanya = campanya_actual + 1
+
+    # Build new declaration from original
+    new_id = _generate_id()
+    attributes = {
+        "campaignYear": _property(nueva_campanya),
+        "tenantId": _property(tenant),
+        "version": _property(1),
+        "isActive": _property(True),
+    }
+
+    # Copy crop and area if present
+    for attr_key, ngsi_key in [
+        ('declaredCrop', 'declaredCrop'),
+        ('declaredArea', 'declaredArea'),
+    ]:
+        val = original.get(attr_key)
+        if val is not None:
+            attributes[ngsi_key] = _property(val if not isinstance(val, dict) else val.get('value', val))
+
+    # Copy relationship to the same AgriParcel
+    parcel_rel = original.get('hasAgriParcel')
+    if parcel_rel:
+        attributes['hasAgriParcel'] = {
+            "type": "Relationship",
+            "object": parcel_rel.get('object') if isinstance(parcel_rel, dict) else parcel_rel
+        }
+
+    status, result = create_entity('AgriCropDeclaration', tenant, new_id, attributes)
+    if status in (200, 201):
+        return jsonify({
+            'id': new_id,
+            'campanya': nueva_campanya,
+            'duplicado_de': decl_id,
+            'status': 'created'
+        }), 201
+    return jsonify({'error': f'Error al duplicar: {result}'}), status
 
 
 # ===========================================================================
@@ -630,6 +697,60 @@ def list_recintos_by_declaracion(decl_id):
             conn.close()
 
 
+@cue_bp.route('/recintos/batch', methods=['POST'])
+@require_auth
+def create_recintos_batch():
+    """Create multiple SigpacEnclosure entities in one request."""
+    data = request.json or {}
+    recintos = data.get('recintos', [])
+    if not recintos or not isinstance(recintos, list):
+        return jsonify({'error': 'Se requiere un array "recintos" con al menos un elemento'}), 400
+
+    tenant = get_current_tenant()
+    results = []
+    errors = []
+
+    for i, recinto_data in enumerate(recintos):
+        recinto_id = recinto_data.get('id') or _generate_id()
+        geo = recinto_data.get('geometria', {})
+
+        valid, err = _validate_polygon(geo)
+        if not valid:
+            errors.append({'index': i, 'error': f'Geometría inválida: {err}'})
+            continue
+
+        attributes = {
+            "sigpacReference": _property(recinto_data.get('referencia_sigpac', '')),
+            "eligibleArea": _property({
+                "value": recinto_data.get('superficie_admisible_ha', 0),
+                "unitCode": "HA"
+            }),
+            "location": _geo_property(geo),
+            "tenantId": _property(tenant),
+            "version": _property(1),
+            "isActive": _property(True),
+        }
+
+        decl_id = recinto_data.get('declaracion_id')
+        if decl_id:
+            decl_uri = _entity_uri('AgriCropDeclaration', tenant, decl_id)
+            attributes['hasAgriCropDeclaration'] = _relationship(decl_uri)
+
+        status, result = create_entity('SigpacEnclosure', tenant, recinto_id, attributes)
+        if status in (200, 201):
+            results.append({'id': recinto_id, 'status': 'created'})
+        else:
+            errors.append({'index': i, 'id': recinto_id, 'error': str(result)})
+
+    return jsonify({
+        'total': len(recintos),
+        'created': len(results),
+        'errors': len(errors),
+        'results': results,
+        'error_details': errors if errors else None,
+    }), 201 if results else 400
+
+
 @cue_bp.route('/recintos', methods=['POST'])
 @require_auth
 def create_recinto():
@@ -640,18 +761,18 @@ def create_recinto():
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     location = body.get('location') or body.get('geometria')
     if not location:
-        return jsonify({'error': 'location or geometria (GeoJSON Polygon) is required'}), 400
+        return jsonify({'error': 'Se requiere location o geometria (GeoJSON Polygon)'}), 400
 
     if not isinstance(location, dict):
-        return jsonify({'error': 'location must be a GeoJSON object'}), 400
+        return jsonify({'error': 'location debe ser un objeto GeoJSON'}), 400
 
     valid, err = _validate_polygon(location)
     if not valid:
-        return jsonify({'error': f'Geometria invalida: {err}'}), 400
+        return jsonify({'error': f'Geometría inválida: {err}'}), 400
 
     enclosure_id = _generate_id()
     attributes = {
@@ -734,7 +855,7 @@ def update_recinto(enclosure_id):
     tenant = get_current_tenant()
     body = request.get_json(silent=True)
     if not body:
-        return jsonify({'error': 'Request body is required'}), 400
+        return jsonify({'error': 'El cuerpo de la solicitud es obligatorio'}), 400
 
     attributes = {}
 
@@ -747,10 +868,10 @@ def update_recinto(enclosure_id):
     location = body.get('location') or body.get('geometria')
     if location is not None:
         if not isinstance(location, dict):
-            return jsonify({'error': 'location must be a GeoJSON object'}), 400
+            return jsonify({'error': 'location debe ser un objeto GeoJSON'}), 400
         valid, err = _validate_polygon(location)
         if not valid:
-            return jsonify({'error': f'Geometria invalida: {err}'}), 400
+            return jsonify({'error': f'Geometría inválida: {err}'}), 400
         attributes['location'] = _geo_property(location)
 
     if 'declaracion_id' in body:
@@ -759,7 +880,7 @@ def update_recinto(enclosure_id):
         )
 
     if not attributes:
-        return jsonify({'error': 'No fields to update'}), 400
+        return jsonify({'error': 'No hay campos para actualizar'}), 400
 
     status, resp = update_entity('SigpacEnclosure', tenant, enclosure_id, attributes)
     if status not in (200, 204):

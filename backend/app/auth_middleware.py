@@ -37,7 +37,7 @@ def require_auth(f):
     def decorated_function(*args, **kwargs):
         token = get_request_token()
         if not token:
-            return jsonify({'error': 'Missing or invalid authorization header'}), 401
+            return jsonify({'error': 'Falta cabecera de autorización o es inválida'}), 401
 
         tenant_id = request.headers.get('X-Tenant-ID')
 
@@ -56,7 +56,7 @@ def require_auth(f):
 
             if not tenant_id:
                 logger.warning("No tenant_id found in token or X-Tenant-ID header")
-                return jsonify({'error': 'Tenant ID not found'}), 401
+                return jsonify({'error': 'No se encontró el ID del tenant'}), 401
 
             g.current_user = payload
             g.tenant = tenant_id
@@ -70,10 +70,10 @@ def require_auth(f):
 
         except jwt.ExpiredSignatureError:
             logger.warning("Token expired")
-            return jsonify({'error': 'Token has expired'}), 401
+            return jsonify({'error': 'El token ha expirado'}), 401
         except Exception as e:
             logger.error(f"Error in auth decorator: {e}")
-            return jsonify({'error': 'Authentication error'}), 500
+            return jsonify({'error': 'Error de autenticación'}), 500
 
     return decorated_function
 
