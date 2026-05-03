@@ -31,7 +31,8 @@
       "/productos-ropo",
       "/productos-ropo/:id",
       "/productos-fertilizantes",
-      "/productos-fertilizantes/:id"
+      "/productos-fertilizantes/:id",
+      "/validate"
     ]
   },
   "frontend": {

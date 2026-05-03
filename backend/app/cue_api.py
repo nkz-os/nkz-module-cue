@@ -8,6 +8,7 @@
 import os
 import logging
 import json
+from datetime import date
 import psycopg2
 import psycopg2.extras
 from flask import Flask, Blueprint, jsonify, request
@@ -1058,6 +1059,28 @@ def create_tratamiento():
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         attributes['hasAgriParcel'] = _relationship(parcela_uri)
 
+    # Validate against rules engine before creating
+    if data.get('validar', True):
+        from rules.engine import validate_tratamiento as validate_tratamiento_rules
+        try:
+            fecha_app = date.fromisoformat(data.get('fecha', '')) if data.get('fecha') else date.today()
+        except (ValueError, TypeError):
+            fecha_app = date.today()
+
+        validation = validate_tratamiento_rules(
+            numero_registro=data.get('producto_ropo', ''),
+            dosis=float(data.get('dosis', 0)),
+            cultivo=data.get('cultivo', ''),
+            plaga=data.get('plaga', ''),
+            fecha_aplicacion=fecha_app,
+        )
+
+        if data.get('validacion_estricta', True) and not validation['valid']:
+            return jsonify({
+                'error': 'El tratamiento no supera las validaciones SIEX',
+                'validation': validation,
+            }), 422
+
     status, result = create_entity('AgriPestTreatment', tenant, tratamiento_id, attributes)
     return jsonify(result), status if status in (200, 201) else status
 
@@ -1368,6 +1391,52 @@ def get_producto_fertilizante(numero_registro):
     except Exception as e:
         logger.error(f"Error getting fertilizer product: {e}")
         return jsonify({'error': 'Error al consultar producto fertilizante'}), 500
+
+
+# =========================================================================
+# VALIDATION ROUTE
+# =========================================================================
+
+@cue_bp.route('/validate', methods=['POST'])
+@require_auth
+def validate_tratamiento_endpoint():
+    """
+    Validate a phytosanitary treatment against SIEX rules before creating.
+    Does NOT create the entity — only validates.
+    """
+    from rules.engine import validate_tratamiento as validate_tratamiento_rules
+
+    data = request.json or {}
+    tenant = get_current_tenant()
+
+    required = ['numero_registro', 'dosis', 'cultivo', 'plaga', 'fecha_aplicacion']
+    missing = [f for f in required if f not in data]
+    if missing:
+        return jsonify({'error': f'Faltan campos obligatorios: {", ".join(missing)}'}), 400
+
+    try:
+        fecha_aplicacion = date.fromisoformat(data['fecha_aplicacion'])
+    except (ValueError, TypeError):
+        return jsonify({'error': 'fecha_aplicacion debe ser una fecha ISO (YYYY-MM-DD)'}), 400
+
+    fecha_cosecha = None
+    if data.get('fecha_cosecha'):
+        try:
+            fecha_cosecha = date.fromisoformat(data['fecha_cosecha'])
+        except (ValueError, TypeError):
+            return jsonify({'error': 'fecha_cosecha debe ser una fecha ISO (YYYY-MM-DD)'}), 400
+
+    result = validate_tratamiento_rules(
+        numero_registro=data['numero_registro'],
+        dosis=float(data['dosis']),
+        cultivo=data['cultivo'],
+        plaga=data.get('plaga', ''),
+        fecha_aplicacion=fecha_aplicacion,
+        fecha_cosecha=fecha_cosecha,
+    )
+
+    status_code = 200 if result['valid'] else 422
+    return jsonify(result), status_code
 
 
 # ===========================================================================
