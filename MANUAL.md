@@ -259,6 +259,8 @@ Todas las entidades soportan:
 | `provincia` | string | Recomendado | Provincia |
 | `nif` | string | Recomendado | NIF del titular (genera relación `ownedBy`) |
 | `coordenadas` | [lng, lat] | No | Coordenadas de la sede (WGS84) |
+| `regepa` | string | Recomendado | Número de Registro General de la Explotación (contiene código provincial para enrutamiento IUWS) |
+| `cif_entidad_habilitada` | string | No | CIF de la entidad habilitada (ej. Nekazari) para el vínculo IUWS |
 
 ### Unidad de producción (AgriParcel)
 

@@ -64,6 +64,9 @@ def cue_context():
                 "@type": "Property",
                 "@id": "urn:ngsi-ld:AgriCropDeclaration:campaignYear"
             },
+            "cifEntidadHabilitada": {
+                "@type": "Property"
+            },
             "declaredCrop": {
                 "@type": "Property",
                 "@id": "urn:ngsi-ld:AgriCropDeclaration:declaredCrop"
@@ -89,6 +92,9 @@ def cue_context():
             "parentId": {
                 "@type": "Property",
                 "@id": "urn:ngsi-ld:parentId"
+            },
+            "regepa": {
+                "@type": "Property"
             },
             "tenantId": {
                 "@type": "Property",
@@ -238,10 +244,16 @@ def create_explotacion():
         'description': _property(body.get('descripcion', '')),
         'contactPoint': _property(body.get('contacto', '')),
         'address': _property(body.get('direccion', '')),
-        'tenantId': _property(tenant),
         'version': _property(1),
         'isActive': _property(True),
     }
+
+    if body.get('regepa'):
+        attributes['regepa'] = _property(body['regepa'])
+    if body.get('cif_entidad_habilitada'):
+        attributes['cifEntidadHabilitada'] = _property(body['cif_entidad_habilitada'])
+
+    attributes['tenantId'] = _property(tenant)
 
     municipio = body.get('municipio', '')
     provincia = body.get('provincia', '')
@@ -298,6 +310,11 @@ def update_explotacion(farm_id):
         attributes['description'] = _property(body['descripcion'])
     if 'contacto' in body:
         attributes['contactPoint'] = _property(body['contacto'])
+
+    if 'regepa' in body:
+        attributes['regepa'] = _property(body['regepa'])
+    if 'cif_entidad_habilitada' in body:
+        attributes['cifEntidadHabilitada'] = _property(body['cif_entidad_habilitada'])
 
     municipio = body.get('municipio')
     provincia = body.get('provincia')
