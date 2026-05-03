@@ -1,11 +1,14 @@
 // ModuleViewerSlots type — defined locally as it's not yet exported from @nekazari/sdk
 import type React from 'react';
+import { CUEEnclosureLayer } from '../components/CUEEnclosureLayer';
+import { CUEMainPanel } from '../components/CUEMainPanel';
 
 interface SlotWidgetDefinition {
   id: string;
   moduleId: string;
   component: string;
   priority: number;
+  localComponent?: React.FC<any>;
 }
 
 interface ModuleViewerSlots {
@@ -26,6 +29,7 @@ export const moduleSlots: ModuleViewerSlots = {
       moduleId: MODULE_ID,
       component: 'CUEMainPanel',
       priority: 100,
+      localComponent: CUEMainPanel,
     },
   ],
   'map-layer': [
@@ -34,6 +38,7 @@ export const moduleSlots: ModuleViewerSlots = {
       moduleId: MODULE_ID,
       component: 'CUEEnclosureLayer',
       priority: 90,
+      localComponent: CUEEnclosureLayer,
     },
   ],
 };
