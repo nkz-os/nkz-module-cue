@@ -25,6 +25,14 @@ from .serializers.siex_serializer import (
     validate_against_xsd,
     _get_ngsi_value,
 )
+from .integration.iuws_client import (
+    resolve_iuws_url,
+    extract_province_from_regepa,
+    download_rea,
+    submit_cue,
+    check_submission_status,
+    translate_siex_error,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1552,6 +1560,169 @@ def serialize_explotacion(farm_id):
     except Exception as e:
         logger.error(f"Serialization error for farm {farm_id}: {e}", exc_info=True)
         return jsonify({'error': f'Error de serialización: {str(e)}'}), 500
+
+
+# =========================================================================
+# IUWS SUBMISSION ROUTES
+# =========================================================================
+
+@cue_bp.route('/submit/<farm_id>', methods=['POST'])
+@require_auth
+def submit_to_iuws(farm_id):
+    """
+    Submit a complete explotacion to the IUWS endpoint.
+
+    1. Fetches farm + parcels + enclosures + treatments + fertilizations
+    2. Serializes to SIEX XML
+    3. Validates against XSD
+    4. Resolves IUWS URL from REGEPA province code
+    5. Submits XML payload via mTLS
+    6. Returns idTicket for status polling
+    """
+    tenant = get_current_tenant()
+    data = request.json or {}
+    payload_type = data.get('tipo', 'Alta')
+
+    # 1. Fetch farm
+    status, farm = get_entity('AgriFarm', tenant, farm_id)
+    if status != 200:
+        return jsonify({'error': f'Explotación no encontrada (status {status})'}), 404
+
+    # 2. Resolve IUWS endpoint
+    regepa = _get_ngsi_value(farm.get('regepa', ''))
+    provincia = extract_province_from_regepa(regepa)
+    if not provincia:
+        return jsonify({'error': f'No se pudo extraer el código provincial del REGEPA: {regepa}'}), 400
+
+    iuws_url = resolve_iuws_url(provincia)
+    if not iuws_url:
+        return jsonify({'error': f'No hay endpoint IUWS configurado para la provincia {provincia}'}), 400
+
+    # 3. Fetch related entities
+    farm_uri = _entity_uri('AgriFarm', tenant, farm_id)
+    _, parcelas = query_entities('AgriParcel', tenant, {'q': f'hasAgriFarm=="{farm_uri}";isActive!=false'})
+    parcelas = parcelas if isinstance(parcelas, list) else []
+
+    enclosures, treatments, fertilizations = [], [], []
+    for p in parcelas:
+        p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
+        if not p_id:
+            continue
+        p_uri = _entity_uri('AgriParcel', tenant, p_id)
+        for etype, lst in [
+            ('SigpacEnclosure', enclosures),
+            ('AgriPestTreatment', treatments),
+            ('AgriFertilizerApplication', fertilizations),
+        ]:
+            _, items = query_entities(etype, tenant, {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'})
+            lst.extend(items if isinstance(items, list) else [])
+
+    # 4. Serialize
+    xml_str = serialize_explotacion_to_xml(
+        farm, parcelas, enclosures, treatments, fertilizations,
+        payload_type=payload_type,
+        original_trace_id=data.get('trace_id'),
+        motivo_anulacion=data.get('motivo'),
+    )
+
+    # 5. Validate
+    valid, err = validate_against_xsd(xml_str, payload_type)
+    if not valid:
+        return jsonify({
+            'error': 'El XML no supera la validación XSD',
+            'xsd_error': err,
+            'xml': xml_str[:1000],
+        }), 422
+
+    # 6. Extract NIF and CIF
+    nif_urn = _get_ngsi_value(farm.get('ownedBy', ''))
+    nif = str(nif_urn).split(':')[-1] if nif_urn else ''
+    cif = _get_ngsi_value(farm.get('cifEntidadHabilitada', ''))
+
+    if not nif:
+        return jsonify({'error': 'La explotación no tiene NIF del titular (ownedBy)'}), 400
+
+    # 7. Submit to IUWS
+    status, result = submit_cue(iuws_url, xml_str, nif, cif)
+
+    if status in (200, 201, 202):
+        return jsonify({
+            'status': 'submitted',
+            'idTicket': result.get('idTicket'),
+            'iuws_url': iuws_url,
+            'comunidad': provincia,
+        }), 200
+    else:
+        return jsonify({
+            'error': 'El envío a la administración falló',
+            'iuws_status': status,
+            'iuws_response': result,
+        }), 502
+
+
+@cue_bp.route('/submission/<id_ticket>', methods=['GET'])
+@require_auth
+def check_submission(id_ticket):
+    """
+    Check the status of a submitted CUE transaction.
+
+    Query params:
+        provincia: 2-digit province code to resolve IUWS endpoint
+    """
+    provincia = request.args.get('provincia')
+    if not provincia:
+        return jsonify({'error': 'Se requiere el parámetro provincia (código de 2 dígitos)'}), 400
+
+    iuws_url = resolve_iuws_url(provincia)
+    if not iuws_url:
+        return jsonify({'error': f'No hay endpoint IUWS para la provincia {provincia}'}), 400
+
+    status, result = check_submission_status(iuws_url, id_ticket)
+
+    if status == 200:
+        estado = result.get('estado', 'unknown')
+        if estado in ('Rechazado', 'rechazado', 'rejected'):
+            error_codes = result.get('detail', {}).get('errores', [])
+            translated = [translate_siex_error(e) for e in error_codes]
+            result['errores_traducidos'] = translated
+        return jsonify(result), 200
+    else:
+        return jsonify(result), status
+
+
+@cue_bp.route('/rea/<farm_id>', methods=['GET'])
+@require_auth
+def download_rea_endpoint(farm_id):
+    """
+    Download REA data for a farm from the IUWS endpoint.
+
+    Fetches farm data (parcels, SIGPAC enclosures, machinery) from
+    the autonomous community system.
+    """
+    tenant = get_current_tenant()
+
+    status, farm = get_entity('AgriFarm', tenant, farm_id)
+    if status != 200:
+        return jsonify({'error': f'Explotación no encontrada (status {status})'}), 404
+
+    regepa = _get_ngsi_value(farm.get('regepa', ''))
+    provincia = extract_province_from_regepa(regepa)
+    if not provincia:
+        return jsonify({'error': f'No se pudo extraer código provincial del REGEPA: {regepa}'}), 400
+
+    iuws_url = resolve_iuws_url(provincia)
+    if not iuws_url:
+        return jsonify({'error': f'No hay endpoint IUWS para provincia {provincia}'}), 400
+
+    nif_urn = _get_ngsi_value(farm.get('ownedBy', ''))
+    nif = str(nif_urn).split(':')[-1] if nif_urn else ''
+    cif = _get_ngsi_value(farm.get('cifEntidadHabilitada', ''))
+
+    if not nif:
+        return jsonify({'error': 'La explotación no tiene NIF del titular'}), 400
+
+    status, result = download_rea(iuws_url, nif, cif)
+    return jsonify(result), status
 
 
 app.register_blueprint(cue_bp)
