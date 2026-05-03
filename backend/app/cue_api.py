@@ -41,6 +41,7 @@ from .integration.state_machine import (
     list_submissions,
     TRANSITIONS,
 )
+from .integration.iuws_poller import run_polling_cycle
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1783,6 +1784,27 @@ def transition_submission_endpoint(submission_id):
     if ok:
         return jsonify({'status': 'transitioned', 'message': msg}), 200
     return jsonify({'error': msg}), 422
+
+
+# =========================================================================
+# POLLING WORKER ENDPOINT
+# =========================================================================
+
+@cue_bp.route('/poll-iuws', methods=['POST'])
+@require_auth
+def trigger_iuws_polling():
+    """
+    Trigger a manual IUWS polling cycle.
+
+    Checks all pending/procesando submissions against their IUWS endpoints
+    and updates their states.
+
+    In production, this is also run as a cron job (every 5 min).
+    """
+    tenant = get_current_tenant()
+    logger.info(f"Manual IUWS polling triggered by tenant {tenant}")
+    summary = run_polling_cycle()
+    return jsonify(summary), 200
 
 
 app.register_blueprint(cue_bp)
