@@ -20,6 +20,11 @@ env/
 .DS_Store
 Thumbs.db
 
+# Node
+node_modules/
+.pnpm-store/
+npm-debug.log*
+
 # Agent / AI config files (not for public repos)
 CLAUDE.md
 AGENTS.md

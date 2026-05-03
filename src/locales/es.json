@@ -1,0 +1,26 @@
+{
+  "module": {
+    "name": "Cuaderno de Campo",
+    "description": "Cuaderno de Explotación Único — SIEX (RD 1054/2022)"
+  },
+  "nav": {
+    "explotaciones": "Explotaciones",
+    "parcelas": "Unidades de Producción",
+    "declaraciones": "Líneas de Declaración",
+    "recintos": "Recintos SIGPAC",
+    "tratamientos": "Tratamientos Fitosanitarios",
+    "fertilizaciones": "Fertilizaciones",
+    "catalogos": "Catálogos"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "create": "Crear",
+    "search": "Buscar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "noData": "Sin datos"
+  }
+}
