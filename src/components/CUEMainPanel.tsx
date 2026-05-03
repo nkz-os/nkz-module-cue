@@ -8,7 +8,7 @@ import { FertilizacionList } from './FertilizacionList';
 import { FertilizacionForm } from './FertilizacionForm';
 import { CatalogoPanel } from './CatalogoPanel';
 import { RecintoForm } from './RecintoForm';
-import { recintosApi } from '../services/cueApi';
+import { recintosApi, declaracionesApi } from '../services/cueApi';
 
 type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos';
 type ViewMode = 'list' | 'create' | 'edit';
@@ -102,6 +102,14 @@ export const CUEMainPanel: React.FC = () => {
     fetchRecintos();
   };
 
+  const handleDuplicarDeclaracion = function (declId: string) {
+    const nuevaCampanya = prompt('Nueva campaña (año):', String(new Date().getFullYear()));
+    if (!nuevaCampanya) return;
+    declaracionesApi.duplicar(declId, parseInt(nuevaCampanya))
+      .then(() => alert('Declaración duplicada correctamente'))
+      .catch(err => alert('Error: ' + (err.error || 'No se pudo duplicar')));
+  };
+
   const renderRecintosTab = function () {
     if (recintoMode === 'create' || recintoMode === 'edit') {
       if (!declarationId.trim()) {
@@ -140,7 +148,14 @@ export const CUEMainPanel: React.FC = () => {
           },
             React.createElement(Search, { className: 'h-4 w-4' }),
             'Buscar'
-          )
+          ),
+          declarationId.trim()
+            ? React.createElement('button', {
+                onClick: function () { handleDuplicarDeclaracion(declarationId.trim()); },
+                disabled: recintoListLoading,
+                className: 'px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-1 disabled:opacity-50',
+              }, 'Duplicar campaña')
+            : null
         )
       ),
 

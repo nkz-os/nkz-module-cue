@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertCircle, CheckCircle, ArrowLeft, AlertTriangle, Search as SearchIcon } from 'lucide-react';
-import { tratamientosApi, catalogosApi } from '../services/cueApi';
+import { tratamientosApi, catalogosApi, explotacionesApi } from '../services/cueApi';
 
 interface TratamientoFormProps {
   onSaved: () => void;
@@ -49,6 +49,9 @@ export const TratamientoForm: React.FC<TratamientoFormProps> = ({ onSaved, trata
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const [parcelas, setParcelas] = useState<any[]>([]);
+  const [loadingParcelas, setLoadingParcelas] = useState(false);
+
   // Validation state
   const [validationErrors, setValidationErrors] = useState<ValidationIssue[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<ValidationIssue[]>([]);
@@ -81,6 +84,21 @@ export const TratamientoForm: React.FC<TratamientoFormProps> = ({ onSaved, trata
       }
     }
   }, [tratamiento]);
+
+  useEffect(() => {
+    setLoadingParcelas(true);
+    explotacionesApi.list()
+      .then(farms => {
+        const allParcelas: any[] = [];
+        Promise.all(farms.map(f => explotacionesApi.listParcelas(f.id)))
+          .then(results => {
+            results.forEach(parcelas => allParcelas.push(...(Array.isArray(parcelas) ? parcelas : [])));
+            setParcelas(allParcelas);
+            setLoadingParcelas(false);
+          });
+      })
+      .catch(() => setLoadingParcelas(false));
+  }, []);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -274,19 +292,25 @@ export const TratamientoForm: React.FC<TratamientoFormProps> = ({ onSaved, trata
 
     // Form
     React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-3' },
-      // parcela_id
+      // parcela_id — dropdown from explotaciones
       React.createElement('div', null,
         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' },
           'Parcela ID ', React.createElement('span', { className: 'text-red-500' }, '*')
         ),
-        React.createElement('input', {
-          type: 'text',
-          className: 'border border-gray-300 rounded px-3 py-2 w-full',
+        React.createElement('select', {
           value: formData.parcela_id,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => updateField('parcela_id', e.target.value),
-          placeholder: 'ID de la parcela (AgriParcel)',
-          required: true,
-        })
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateField('parcela_id', e.target.value),
+          className: 'border border-gray-300 rounded px-3 py-2 w-full text-sm',
+          disabled: loadingParcelas,
+        },
+          React.createElement('option', { value: '' }, loadingParcelas ? 'Cargando parcelas...' : '-- Seleccionar parcela --'),
+          ...parcelas.map(p =>
+            React.createElement('option', {
+              key: p.id || p.orion_entity_id,
+              value: p.id
+            }, `${p.name || p.nombre || 'Sin nombre'} (${p.hasCrop || p.cultivo || 'sin cultivo'})`)
+          )
+        )
       ),
 
       // producto_ropo with autocomplete
