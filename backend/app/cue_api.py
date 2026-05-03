@@ -33,6 +33,14 @@ from .integration.iuws_client import (
     check_submission_status,
     translate_siex_error,
 )
+from .integration.state_machine import (
+    create_submission,
+    transition_state,
+    set_ticket,
+    get_submission,
+    list_submissions,
+    TRANSITIONS,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1642,21 +1650,33 @@ def submit_to_iuws(farm_id):
     if not nif:
         return jsonify({'error': 'La explotación no tiene NIF del titular (ownedBy)'}), 400
 
+    # Create state machine entry (borrador -> validado)
+    submission_id = create_submission(
+        tenant, farm_id, payload_type, provincia, iuws_url, xml_str, True
+    )
+    transition_state(submission_id, 'validado')
+    transition_state(submission_id, 'firmado')
+
     # 7. Submit to IUWS
     status, result = submit_cue(iuws_url, xml_str, nif, cif)
 
     if status in (200, 201, 202):
+        set_ticket(submission_id, result.get('idTicket'))
+        transition_state(submission_id, 'pendiente')
         return jsonify({
             'status': 'submitted',
             'idTicket': result.get('idTicket'),
             'iuws_url': iuws_url,
             'comunidad': provincia,
+            'submission_id': submission_id,
         }), 200
     else:
+        transition_state(submission_id, 'rechazado_con_errores', result)
         return jsonify({
             'error': 'El envío a la administración falló',
             'iuws_status': status,
             'iuws_response': result,
+            'submission_id': submission_id,
         }), 502
 
 
@@ -1723,6 +1743,46 @@ def download_rea_endpoint(farm_id):
 
     status, result = download_rea(iuws_url, nif, cif)
     return jsonify(result), status
+
+
+# =========================================================================
+# SUBMISSION STATE MACHINE ROUTES
+# =========================================================================
+
+@cue_bp.route('/submissions', methods=['GET'])
+@require_auth
+def list_submissions_endpoint():
+    """List submission history for current tenant."""
+    tenant = get_current_tenant()
+    farm_id = request.args.get('farm_id')
+    estado = request.args.get('estado')
+    submissions = list_submissions(tenant, farm_id, estado)
+    return jsonify(submissions), 200
+
+
+@cue_bp.route('/submissions/<int:submission_id>', methods=['GET'])
+@require_auth
+def get_submission_endpoint(submission_id):
+    """Get a single submission by ID."""
+    sub = get_submission(submission_id)
+    if sub:
+        return jsonify(sub), 200
+    return jsonify({'error': 'Envio no encontrado'}), 404
+
+
+@cue_bp.route('/submissions/<int:submission_id>/transition', methods=['POST'])
+@require_auth
+def transition_submission_endpoint(submission_id):
+    """Manually transition a submission state."""
+    data = request.json or {}
+    new_state = data.get('estado')
+    if not new_state:
+        return jsonify({'error': 'Se requiere el campo estado'}), 400
+
+    ok, msg = transition_state(submission_id, new_state, data.get('metadata'))
+    if ok:
+        return jsonify({'status': 'transitioned', 'message': msg}), 200
+    return jsonify({'error': msg}), 422
 
 
 app.register_blueprint(cue_bp)

@@ -36,6 +36,9 @@
       "/serialize/:id",
       "/submit/:id",
       "/submission/:id",
+      "/submissions",
+      "/submissions/:id",
+      "/submissions/:id/transition",
       "/rea/:id"
     ]
   },
