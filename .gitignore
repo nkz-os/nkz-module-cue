@@ -8,6 +8,7 @@ build/
 .venv/
 venv/
 env/
+.pytest_cache/
 
 # IDE
 .vscode/
@@ -18,3 +19,13 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent / AI config files (not for public repos)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+IMPLEMENTATION_PLAN.md
+.ai/
+
+# Internal docs (workspace-level, not module)
+internal-docs/
