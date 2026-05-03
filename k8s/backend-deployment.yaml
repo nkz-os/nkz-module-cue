@@ -41,7 +41,7 @@ spec:
             - name: JWT_AUDIENCE
               value: "account"
             - name: ORION_URL
-              value: "http://orion-service:1026"
+              value: "http://orion-ld-service:1026"
             - name: CONTEXT_URL
               value: "http://api-gateway-service:5000/ngsi-ld-context.jsonld"
             - name: CUE_CONTEXT_URL

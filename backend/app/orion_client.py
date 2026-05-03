@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-ORION_URL = os.getenv('ORION_URL', 'http://orion-service:1026')
+ORION_URL = os.getenv('ORION_URL', 'http://orion-ld-service:1026')
 NGSI_LD_CONTEXT_URL = os.getenv(
     'CONTEXT_URL',
     'http://api-gateway-service:5000/ngsi-ld-context.jsonld'
