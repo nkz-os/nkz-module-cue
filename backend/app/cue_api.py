@@ -159,6 +159,39 @@ def get_pg_conn():
     return conn
 
 
+def _validate_polygon(geom):
+    """Validate a GeoJSON Polygon. Returns (bool, error_message)."""
+    if not isinstance(geom, dict):
+        return False, 'geometry must be a GeoJSON object'
+
+    if geom.get('type') != 'Polygon':
+        return False, 'geometry type must be Polygon'
+
+    coords = geom.get('coordinates')
+    if not isinstance(coords, list) or not coords:
+        return False, 'coordinates must be a non-empty array'
+
+    ring = coords[0]
+    if not isinstance(ring, list) or len(ring) < 4:
+        return False, 'Polygon must have at least 4 points (closed ring)'
+
+    if ring[0] != ring[-1]:
+        return False, 'Polygon exterior ring must be closed'
+
+    for pt in ring:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            return False, 'each coordinate must be [lon, lat]'
+        lon, lat = pt[0], pt[1]
+        if not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)):
+            return False, 'coordinates must be numeric'
+        if abs(lat) > 90:
+            return False, f'latitude {lat} out of range [-90, 90]'
+        if abs(lon) > 180:
+            return False, f'longitude {lon} out of range [-180, 180]'
+
+    return True, ''
+
+
 def _generate_id():
     """Generate a short hex entity ID."""
     return os.urandom(8).hex()
@@ -616,9 +649,9 @@ def create_recinto():
     if not isinstance(location, dict):
         return jsonify({'error': 'location must be a GeoJSON object'}), 400
 
-    geo_type = location.get('type')
-    if geo_type != 'Polygon':
-        return jsonify({'error': f'Expected Polygon geometry, got {geo_type}'}), 400
+    valid, err = _validate_polygon(location)
+    if not valid:
+        return jsonify({'error': f'Geometria invalida: {err}'}), 400
 
     enclosure_id = _generate_id()
     attributes = {
@@ -715,8 +748,9 @@ def update_recinto(enclosure_id):
     if location is not None:
         if not isinstance(location, dict):
             return jsonify({'error': 'location must be a GeoJSON object'}), 400
-        if location.get('type') != 'Polygon':
-            return jsonify({'error': f'Expected Polygon geometry, got {location.get("type")}'}), 400
+        valid, err = _validate_polygon(location)
+        if not valid:
+            return jsonify({'error': f'Geometria invalida: {err}'}), 400
         attributes['location'] = _geo_property(location)
 
     if 'declaracion_id' in body:
