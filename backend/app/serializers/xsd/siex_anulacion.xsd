@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified">
+  <xs:element name="SolicitudAnulacion">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Cabecera" type="CabeceraType"/>
+        <xs:element name="Explotacion" type="ExplotacionType"/>
+        <xs:element name="Actividades" type="ActividadesType" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:string" fixed="3.11.4"/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="CabeceraType">
+    <xs:sequence>
+      <xs:element name="NIFTitular" type="xs:string"/>
+      <xs:element name="CIFEntidadHabilitada" type="xs:string" minOccurs="0"/>
+      <xs:element name="REGEPA" type="xs:string"/>
+      <xs:element name="TipoOperacion" type="xs:string"/>
+      <xs:element name="FechaEnvio" type="xs:date"/>
+      <xs:element name="ReferenciaEnvioOriginal" type="xs:string"/>
+      <xs:element name="MotivoAnulacion" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ExplotacionType">
+    <xs:sequence>
+      <xs:element name="Nombre" type="xs:string"/>
+      <xs:element name="Municipio" type="xs:string"/>
+      <xs:element name="Provincia" type="xs:string"/>
+      <xs:element name="Parcelas" type="ParcelasType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ParcelasType">
+    <xs:sequence>
+      <xs:element name="Parcela" type="ParcelaType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ParcelaType">
+    <xs:sequence>
+      <xs:element name="Nombre" type="xs:string"/>
+      <xs:element name="Cultivo" type="xs:string"/>
+      <xs:element name="SuperficieHA" type="xs:decimal"/>
+      <xs:element name="SistemaRiego" type="xs:string" minOccurs="0"/>
+      <xs:element name="Recintos" type="RecintosType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RecintosType">
+    <xs:sequence>
+      <xs:element name="Recinto" type="RecintoType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RecintoType">
+    <xs:sequence>
+      <xs:element name="ReferenciaSIGPAC" type="xs:string"/>
+      <xs:element name="SuperficieAdmisibleHA" type="xs:decimal"/>
+      <xs:element name="Geometria" type="GeometriaType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="GeometriaType">
+    <xs:sequence>
+      <xs:element name="Tipo" type="xs:string"/>
+      <xs:element name="Coordenadas" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ActividadesType">
+    <xs:sequence>
+      <xs:element name="TratamientoFitosanitario" type="TratamientoFitoType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="AplicacionFertilizante" type="FertilizacionType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TratamientoFitoType">
+    <xs:sequence>
+      <xs:element name="FechaAplicacion" type="xs:date"/>
+      <xs:element name="ProductoROPORef" type="xs:string"/>
+      <xs:element name="Dosis" type="xs:decimal"/>
+      <xs:element name="UnidadDosis" type="xs:string"/>
+      <xs:element name="Plaga" type="xs:string"/>
+      <xs:element name="Equipo" type="xs:string" minOccurs="0"/>
+      <xs:element name="Aplicador" type="xs:string" minOccurs="0"/>
+      <xs:element name="Hora" type="xs:string" minOccurs="0"/>
+      <xs:element name="ParcelaRef" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="FertilizacionType">
+    <xs:sequence>
+      <xs:element name="FechaAplicacion" type="xs:date"/>
+      <xs:element name="TipoFertilizante" type="xs:string"/>
+      <xs:element name="DosisKGHA" type="xs:decimal"/>
+      <xs:element name="ContenidoNPCT" type="xs:decimal" minOccurs="0"/>
+      <xs:element name="ContenidoPPCT" type="xs:decimal" minOccurs="0"/>
+      <xs:element name="ParcelaRef" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>
