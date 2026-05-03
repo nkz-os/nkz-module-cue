@@ -1231,6 +1231,145 @@ def delete_fertilizacion(fertilizacion_id):
     return jsonify(result), status
 
 
+# =========================================================================
+# PRODUCT CATALOG ROUTES (ROPO + Fertilizantes master data)
+# =========================================================================
+
+
+@cue_bp.route('/productos-ropo', methods=['GET'])
+@require_auth
+def list_productos_ropo():
+    """List/search ROPO products with SCD Type 2 temporal validity."""
+    tenant = get_current_tenant()
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+
+        query = request.args.get('q')
+        cultivo = request.args.get('cultivo')
+        estado = request.args.get('estado', 'autorizado')
+
+        sql = """
+            SELECT numero_registro, nombre_comercial, ingrediente_activo,
+                   tipo, estado, cultivos_autorizados, plagas_autorizadas,
+                   dosis_maxima, unidad_dosis, plazo_seguridad_dias,
+                   fecha_inicio_validez, fecha_fin_validez
+            FROM cue_producto_ropo
+            WHERE estado = %s AND fecha_fin_validez IS NULL
+        """
+        params = [estado]
+
+        if query:
+            sql += (" AND (nombre_comercial ILIKE %s OR ingrediente_activo ILIKE %s "
+                    "OR numero_registro ILIKE %s)")
+            params.extend([f'%{query}%', f'%{query}%', f'%{query}%'])
+
+        if cultivo:
+            sql += " AND %s = ANY(cultivos_autorizados)"
+            params.append(cultivo)
+
+        sql += " ORDER BY nombre_comercial LIMIT 200"
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify([dict(r) for r in rows]), 200
+    except Exception as e:
+        logger.error(f"Error querying ROPO products: {e}")
+        return jsonify({'error': 'Error al consultar productos ROPO'}), 500
+
+
+@cue_bp.route('/productos-ropo/<numero_registro>', methods=['GET'])
+@require_auth
+def get_producto_ropo(numero_registro):
+    """Get a specific ROPO product by registration number."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM cue_producto_ropo "
+            "WHERE numero_registro = %s AND fecha_fin_validez IS NULL "
+            "ORDER BY fecha_inicio_validez DESC LIMIT 1",
+            (numero_registro,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return jsonify(dict(row)), 200
+        return jsonify({'error': 'Producto ROPO no encontrado'}), 404
+    except Exception as e:
+        logger.error(f"Error getting ROPO product: {e}")
+        return jsonify({'error': 'Error al consultar producto ROPO'}), 500
+
+
+@cue_bp.route('/productos-fertilizantes', methods=['GET'])
+@require_auth
+def list_productos_fertilizantes():
+    """List/search fertilizer products with SCD Type 2 temporal validity."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+
+        query = request.args.get('q')
+        tipo = request.args.get('tipo')
+        estado = request.args.get('estado', 'autorizado')
+
+        sql = """
+            SELECT numero_registro, nombre_comercial, tipo,
+                   composicion_n_pct, composicion_p_pct, composicion_k_pct,
+                   fabricante, estado, cultivos_autorizados, dosis_maxima_kg_ha,
+                   fecha_inicio_validez, fecha_fin_validez
+            FROM cue_producto_fertilizante
+            WHERE estado = %s AND fecha_fin_validez IS NULL
+        """
+        params = [estado]
+
+        if query:
+            sql += (" AND (nombre_comercial ILIKE %s OR numero_registro ILIKE %s)")
+            params.extend([f'%{query}%', f'%{query}%'])
+
+        if tipo:
+            sql += " AND tipo = %s"
+            params.append(tipo)
+
+        sql += " ORDER BY nombre_comercial LIMIT 200"
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify([dict(r) for r in rows]), 200
+    except Exception as e:
+        logger.error(f"Error querying fertilizer products: {e}")
+        return jsonify({'error': 'Error al consultar productos fertilizantes'}), 500
+
+
+@cue_bp.route('/productos-fertilizantes/<numero_registro>', methods=['GET'])
+@require_auth
+def get_producto_fertilizante(numero_registro):
+    """Get a specific fertilizer product by registration number."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM cue_producto_fertilizante "
+            "WHERE numero_registro = %s AND fecha_fin_validez IS NULL "
+            "ORDER BY fecha_inicio_validez DESC LIMIT 1",
+            (numero_registro,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return jsonify(dict(row)), 200
+        return jsonify({'error': 'Producto fertilizante no encontrado'}), 404
+    except Exception as e:
+        logger.error(f"Error getting fertilizer product: {e}")
+        return jsonify({'error': 'Error al consultar producto fertilizante'}), 500
+
+
 # ===========================================================================
 # Register blueprint
 # ===========================================================================

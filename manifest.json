@@ -27,7 +27,11 @@
       "/fertilizaciones",
       "/fertilizaciones/:id",
       "/endpoints-autonomicos",
-      "/endpoints-autonomicos/:codigo"
+      "/endpoints-autonomicos/:codigo",
+      "/productos-ropo",
+      "/productos-ropo/:id",
+      "/productos-fertilizantes",
+      "/productos-fertilizantes/:id"
     ]
   },
   "frontend": {
