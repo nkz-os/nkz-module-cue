@@ -12,8 +12,10 @@ import { RecintoForm } from './RecintoForm';
 import { RecintoBatchForm } from './RecintoBatchForm';
 import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi } from '../services/cueApi';
 import { FirmaWidget } from './FirmaWidget';
+import { GestorDashboard } from './GestorDashboard';
+import { GestorFarmSelector } from './GestorFarmSelector';
 
-type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos' | 'comunidades';
+type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos' | 'comunidades' | 'gestoria';
 type ViewMode = 'list' | 'create' | 'edit';
 
 const TABS: { id: TabId; label: string }[] = [
@@ -23,7 +25,10 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'catalogos', label: 'Catálogos' },
   { id: 'recintos', label: 'Recintos' },
   { id: 'comunidades', label: 'Comunidades' },
+  { id: 'gestoria' as TabId, label: 'Gestoría' },
 ];
+
+const cueAccent = { base: '#EF4444', soft: '#FEE2E2', strong: '#B91C1C' };
 
 export const CUEMainPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('explotaciones');
@@ -52,6 +57,18 @@ export const CUEMainPanel: React.FC = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<any>(null);
+
+  // Gestor mode state
+  const [isGestor, setIsGestor] = useState(false);
+  const [gestorTargetTenant, setGestorTargetTenant] = useState<string | null>(null);
+  const [gestorView, setGestorView] = useState<'dashboard' | 'farm'>('dashboard');
+
+  // Gestoria tab state (farmer side — authorization management)
+  const [autorizaciones, setAutorizaciones] = useState<any[]>([]);
+  const [loadingAuth, setLoadingAuth] = useState(false);
+  const [gestorSub, setGestorSub] = useState('');
+  const [gestorUsername, setGestorUsername] = useState('');
+  const [gestorTenant, setGestorTenant] = useState('');
 
   const handleSelect = (entity: any) => {
     setSelectedEntity(entity);
@@ -113,6 +130,27 @@ export const CUEMainPanel: React.FC = () => {
         .then((data: any) => setEndpoints(Array.isArray(data) ? data : []))
         .catch(() => setEndpoints([]))
         .finally(() => setLoadingEndpoints(false));
+    }
+  }, [activeTab]);
+
+  // Gestor detection: check roles on mount
+  useEffect(() => {
+    const ctx = (window as any).__nekazariAuthContext;
+    const roles = ctx?.roles || [];
+    if (roles.includes('GestorCUE')) {
+      setIsGestor(true);
+    }
+  }, []);
+
+  // Fetch autorizaciones when Gestoria tab is active (farmer side)
+  useEffect(() => {
+    if (activeTab === 'gestoria') {
+      setLoadingAuth(true);
+      const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
+      fetch(apiUrl + '/api/modules/cue/gestor/mis-autorizaciones', { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => { setAutorizaciones(Array.isArray(data) ? data : []); setLoadingAuth(false); })
+        .catch(() => setLoadingAuth(false));
     }
   }, [activeTab]);
 
@@ -354,6 +392,96 @@ export const CUEMainPanel: React.FC = () => {
         return React.createElement(CatalogoPanel, null);
       case 'recintos':
         return renderRecintosTab();
+      case 'gestoria':
+        return React.createElement('div', { className: 'space-y-4' },
+          React.createElement('h3', { className: 'text-lg font-bold' }, 'Gestoría — Autorizaciones'),
+
+          // Existing authorizations
+          loadingAuth && React.createElement('div', { className: 'text-gray-400 text-sm' }, 'Cargando...'),
+
+          !loadingAuth && autorizaciones.length === 0 &&
+            React.createElement('div', { className: 'text-gray-400 text-sm' }, 'No hay gestores autorizados'),
+
+          autorizaciones.map(function (a: any) {
+            return React.createElement('div', { key: a.id, className: 'flex items-center justify-between bg-white border rounded p-3' },
+              React.createElement('div', null,
+                React.createElement('div', { className: 'font-medium text-sm' }, a.gestor_username),
+                React.createElement('div', { className: 'text-xs text-gray-400' }, 'Tenant: ' + a.gestor_tenant),
+                React.createElement('div', { className: 'text-xs ' + (a.autorizado ? 'text-green-600' : 'text-red-500') },
+                  a.autorizado ? 'Autorizado' : 'No autorizado'
+                )
+              ),
+              a.autorizado && React.createElement('button', {
+                onClick: function () {
+                  const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
+                  fetch(apiUrl + '/api/modules/cue/gestor/autorizar/' + a.id, { method: 'DELETE', credentials: 'include' })
+                    .then(r => r.json())
+                    .then(() => setAutorizaciones(prev => prev.map(x => x.id === a.id ? { ...x, autorizado: false } : x)))
+                    .catch(() => alert('Error al revocar'));
+                },
+                className: 'px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200'
+              }, 'Revocar')
+            );
+          }),
+
+          // Add new gestor form
+          React.createElement('div', { className: 'bg-yellow-50 border border-yellow-200 rounded p-4 mt-4' },
+            React.createElement('h4', { className: 'text-sm font-medium text-yellow-800 mb-3' }, 'Autorizar a un gestor'),
+            React.createElement('div', { className: 'space-y-2' },
+              React.createElement('input', {
+                type: 'text',
+                value: gestorSub,
+                onChange: (e: any) => setGestorSub(e.target.value),
+                placeholder: 'ID del gestor (Keycloak sub)',
+                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
+              }),
+              React.createElement('input', {
+                type: 'text',
+                value: gestorUsername,
+                onChange: (e: any) => setGestorUsername(e.target.value),
+                placeholder: 'Email o username del gestor',
+                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
+              }),
+              React.createElement('input', {
+                type: 'text',
+                value: gestorTenant,
+                onChange: (e: any) => setGestorTenant(e.target.value),
+                placeholder: 'Tenant del gestor',
+                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
+              }),
+              React.createElement('button', {
+                onClick: function () {
+                  if (!gestorSub || !gestorUsername) { alert('Rellene los campos obligatorios'); return; }
+                  const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
+                  fetch(apiUrl + '/api/modules/cue/gestor/solicitar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ gestor_sub: gestorSub, gestor_username: gestorUsername, gestor_tenant: gestorTenant })
+                  })
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data.error) { alert(data.error); return; }
+                      setGestorSub(''); setGestorUsername(''); setGestorTenant('');
+                      // Refresh list
+                      const apiUrl2 = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
+                      fetch(apiUrl2 + '/api/modules/cue/gestor/mis-autorizaciones', { credentials: 'include' })
+                        .then(r => r.json())
+                        .then(d => setAutorizaciones(Array.isArray(d) ? d : []));
+                    })
+                    .catch(err => alert('Error: ' + err.message));
+                },
+                disabled: !gestorSub || !gestorUsername,
+                className: 'w-full px-3 py-1.5 text-xs rounded text-white ' +
+                  (!gestorSub || !gestorUsername ? 'bg-gray-300' : 'bg-green-600 hover:bg-green-700')
+              }, 'Autorizar gestor')
+            )
+          ),
+
+          React.createElement('p', { className: 'text-xs text-gray-400 mt-2' },
+            'Al autorizar a un gestor, podrá acceder a sus datos de cuaderno de campo y gestionar envíos al IUWS en su nombre.'
+          )
+        );
       case 'comunidades':
         return React.createElement('div', { className: 'space-y-4' },
           React.createElement('h3', { className: 'text-lg font-bold' }, 'Endpoints IUWS por Comunidad Autónoma'),
@@ -402,12 +530,42 @@ export const CUEMainPanel: React.FC = () => {
     }
   };
 
+  // Gestor: show consolidated dashboard
+  if (isGestor && gestorView === 'dashboard') {
+    return React.createElement(GestorDashboard, {
+      onSelectSubmission: function (sub: any) {
+        setGestorTargetTenant(sub.tenant_id);
+        setGestorView('farm');
+      }
+    });
+  }
+
+  // Gestor: show farm selector before entering a specific farm
+  if (isGestor && gestorView === 'farm' && !gestorTargetTenant) {
+    return React.createElement(GestorFarmSelector, {
+      onSelectFarm: function (tenantId: string) {
+        setGestorTargetTenant(tenantId);
+      }
+    });
+  }
+
   return React.createElement(SlotShell, { moduleId: 'cue', accent: cueAccent },
     React.createElement('div', { className: 'space-y-4' },
     // Module header
     React.createElement('div', { className: 'bg-white rounded-lg shadow p-4' },
       React.createElement('h2', { className: 'text-lg font-bold text-gray-900' }, 'CUE — Cuaderno de Campo'),
       React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, 'SIEX (RD 1054/2022)')
+    ),
+
+    // Gestor banner when managing a specific farm
+    isGestor && gestorTargetTenant && React.createElement('div', { className: 'flex items-center justify-between bg-blue-50 border border-blue-200 rounded p-2 mb-3' },
+      React.createElement('span', { className: 'text-sm text-blue-700' },
+        'Gestionando: ' + gestorTargetTenant
+      ),
+      React.createElement('button', {
+        onClick: function () { setGestorTargetTenant(null); setGestorView('dashboard'); },
+        className: 'text-xs text-blue-600 hover:underline'
+      }, '← Volver al dashboard')
     ),
 
     // Tab navigation

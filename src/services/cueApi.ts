@@ -144,3 +144,28 @@ export const submissionsApi = {
   get: (ticketId: string, provincia: string) => cueGet(`/submission/${ticketId}`, { provincia }),
   list: (filters?: Record<string, string>) => cueGet('/submissions', filters),
 };
+
+// Gestor mode: tenant switching
+let _gestorTargetTenant: string | null = null;
+
+export function setGestorTargetTenant(tenantId: string | null) {
+  _gestorTargetTenant = tenantId;
+}
+
+export function getGestorTargetTenant(): string | null {
+  return _gestorTargetTenant;
+}
+
+export const gestorApi = {
+  tenants: () => cueGet('/gestor/tenants'),
+  submissions: (filters?: Record<string, string>) => cueGet('/gestor/submissions', filters),
+  switchTenant: (tenantId: string) => cuePost('/gestor/switch-tenant', { tenant_id: tenantId }),
+};
+
+// Authorization management (farmer side)
+export const autorizacionesApi = {
+  list: () => cueGet('/gestor/mis-autorizaciones'),
+  solicitar: (gestorSub: string, gestorUsername: string, gestorTenant: string) =>
+    cuePost('/gestor/solicitar', { gestor_sub: gestorSub, gestor_username: gestorUsername, gestor_tenant: gestorTenant }),
+  revocar: (id: number) => cueDelete(`/gestor/autorizar/${id}`),
+};
