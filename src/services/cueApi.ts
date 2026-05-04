@@ -124,3 +124,17 @@ export const catalogosApi = {
   productoFertilizante: (numeroRegistro: string) => cueGet(`/productos-fertilizantes/${numeroRegistro}`),
   endpointsAutonomicos: () => cueGet('/endpoints-autonomicos'),
 };
+
+// Firma (AutoFirma ephemeral cert flow)
+export const firmaApi = {
+  uploadCert: (farmId: string, certB64: string, password: string) =>
+    cuePost(`/firma/${farmId}`, { certificado: certB64, contrasena: password }),
+  purgeCert: () => cueDelete('/firma'),
+};
+
+// Submission flow
+export const submissionsApi = {
+  submit: (farmId: string, data?: any) => cuePost(`/submit/${farmId}`, data || {}),
+  get: (ticketId: string, provincia: string) => cueGet(`/submission/${ticketId}`, { provincia }),
+  list: (filters?: Record<string, string>) => cueGet('/submissions', filters),
+};

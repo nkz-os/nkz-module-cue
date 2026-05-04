@@ -6,8 +6,11 @@
 # Flask + psycopg2 + Orion-LD client wrappers.
 
 import os
+import base64
 import logging
 import json
+import subprocess
+import tempfile
 from datetime import date
 import psycopg2
 import psycopg2.extras
@@ -32,6 +35,8 @@ from .integration.iuws_client import (
     submit_cue,
     check_submission_status,
     translate_siex_error,
+    set_ephemeral_cert,
+    purge_ephemeral_cert,
 )
 from .integration.state_machine import (
     create_submission,
@@ -1659,7 +1664,11 @@ def submit_to_iuws(farm_id):
     transition_state(submission_id, 'firmado')
 
     # 7. Submit to IUWS
-    status, result = submit_cue(iuws_url, xml_str, nif, cif)
+    try:
+        status, result = submit_cue(iuws_url, xml_str, nif, cif)
+    finally:
+        # Always purge ephemeral cert after IUWS call, regardless of outcome
+        purge_ephemeral_cert()
 
     if status in (200, 201, 202):
         set_ticket(submission_id, result.get('idTicket'))
@@ -1805,6 +1814,99 @@ def trigger_iuws_polling():
     logger.info(f"Manual IUWS polling triggered by tenant {tenant}")
     summary = run_polling_cycle()
     return jsonify(summary), 200
+
+
+# =========================================================================
+# FIRMA (AutoFirma ephemeral cert flow)
+# =========================================================================
+
+
+@cue_bp.route('/firma/<farm_id>', methods=['POST'])
+@require_auth
+def upload_firma_cert(farm_id):
+    """
+    Upload a PKCS#12 certificate for AutoFirma ephemeral mTLS flow.
+
+    The certificate and password are loaded into RAM, used for the next
+    IUWS call, then purged. NEVER written to disk. NEVER logged.
+
+    Body: { certificado: "<base64>", contrasena: "<password>" }
+    """
+    data = request.json or {}
+    cert_b64 = data.get('certificado')
+    password = data.get('contrasena')
+
+    if not cert_b64 or not password:
+        return jsonify({'error': 'Se requiere certificado (base64) y contrasena'}), 400
+
+    try:
+        # Decode base64 to DER
+        cert_der = base64.b64decode(cert_b64)
+
+        # Write to temp file to extract PEM with openssl
+        # (pkcs12 to pem extraction requires a file, but it's in /tmp which is
+        #  tmpfs in K8s — never persists to disk)
+        with tempfile.NamedTemporaryFile(suffix='.p12', delete=False) as tmp:
+            tmp.write(cert_der)
+            tmp_path = tmp.name
+
+        try:
+            # Extract certificate
+            cert_result = subprocess.run(
+                ['openssl', 'pkcs12', '-in', tmp_path, '-clcerts', '-nokeys',
+                 '-passin', f'pass:{password}'],
+                capture_output=True, text=True, timeout=10
+            )
+            if cert_result.returncode != 0:
+                return jsonify({
+                    'error': 'No se pudo leer el certificado. Verifique la contrasena.'
+                }), 400
+
+            # Extract private key
+            key_result = subprocess.run(
+                ['openssl', 'pkcs12', '-in', tmp_path, '-nocerts', '-nodes',
+                 '-passin', f'pass:{password}'],
+                capture_output=True, text=True, timeout=10
+            )
+            if key_result.returncode != 0:
+                return jsonify({
+                    'error': 'No se pudo extraer la clave privada. Verifique la contrasena.'
+                }), 400
+
+            cert_pem = cert_result.stdout
+            key_pem = key_result.stdout
+
+            # Load into RAM (never to disk)
+            set_ephemeral_cert(cert_pem, key_pem)
+
+            logger.info(f"Ephemeral certificate loaded for farm {farm_id}")
+            return jsonify({
+                'status': 'loaded',
+                'message': 'Certificado cargado en memoria. Se eliminara tras el envio.',
+            }), 200
+
+        finally:
+            # Purge temp file immediately
+            os.unlink(tmp_path)
+
+    except (ValueError, UnicodeError) as e:
+        logger.error(f"Base64 decode error: {e}")
+        return jsonify({'error': 'El certificado no esta codificado en base64 valido'}), 400
+    except Exception as e:
+        logger.error(f"Error loading ephemeral cert for farm {farm_id}: {e}")
+        purge_ephemeral_cert()
+        return jsonify({'error': f'Error al procesar el certificado: {str(e)}'}), 500
+
+
+@cue_bp.route('/firma', methods=['DELETE'])
+@require_auth
+def purge_firma_cert():
+    """Manually purge ephemeral certificate from RAM."""
+    purge_ephemeral_cert()
+    return jsonify({
+        'status': 'purged',
+        'message': 'Certificado eliminado de la memoria',
+    }), 200
 
 
 app.register_blueprint(cue_bp)

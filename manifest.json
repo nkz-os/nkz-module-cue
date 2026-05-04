@@ -39,7 +39,9 @@
       "/submissions",
       "/submissions/:id",
       "/submissions/:id/transition",
-      "/rea/:id"
+      "/rea/:id",
+      "/firma",
+      "/firma/:id"
     ]
   },
   "frontend": {

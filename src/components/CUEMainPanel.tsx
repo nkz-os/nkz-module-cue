@@ -8,7 +8,8 @@ import { FertilizacionList } from './FertilizacionList';
 import { FertilizacionForm } from './FertilizacionForm';
 import { CatalogoPanel } from './CatalogoPanel';
 import { RecintoForm } from './RecintoForm';
-import { recintosApi, declaracionesApi } from '../services/cueApi';
+import { recintosApi, declaracionesApi, firmaApi, submissionsApi } from '../services/cueApi';
+import { FirmaWidget } from './FirmaWidget';
 
 type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos';
 type ViewMode = 'list' | 'create' | 'edit';
@@ -33,6 +34,15 @@ export const CUEMainPanel: React.FC = () => {
   const [recintoListError, setRecintoListError] = useState<string | null>(null);
   const [selectedRecinto, setSelectedRecinto] = useState<any>(null);
   const [recintoMode, setRecintoMode] = useState<'list' | 'create' | 'edit'>('list');
+
+  // Firma / submit state
+  const [certB64, setCertB64] = useState<string | null>(null);
+  const [certPassword, setCertPassword] = useState<string | null>(null);
+  const [firmaLoaded, setFirmaLoaded] = useState(false);
+  const [submitFarmId, setSubmitFarmId] = useState('');
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitResult, setSubmitResult] = useState<any>(null);
 
   const handleSelect = (entity: any) => {
     setSelectedEntity(entity);
@@ -108,6 +118,46 @@ export const CUEMainPanel: React.FC = () => {
     declaracionesApi.duplicar(declId, parseInt(nuevaCampanya))
       .then(() => alert('Declaración duplicada correctamente'))
       .catch(err => alert('Error: ' + (err.error || 'No se pudo duplicar')));
+  };
+
+  // Firma handlers
+  const handleCertLoaded = async function (b64: string, password: string) {
+    setCertB64(b64);
+    setCertPassword(password);
+    if (!submitFarmId.trim()) return;
+    try {
+      await firmaApi.uploadCert(submitFarmId.trim(), b64, password);
+      setFirmaLoaded(true);
+    } catch (err: any) {
+      setFirmaLoaded(false);
+    }
+  };
+
+  const handleCertClear = function () {
+    setCertB64(null);
+    setCertPassword(null);
+    setFirmaLoaded(false);
+    firmaApi.purgeCert().catch(function () {});
+  };
+
+  const handleSubmit = async function () {
+    if (!submitFarmId.trim()) return;
+    setSubmitLoading(true);
+    setSubmitError(null);
+    setSubmitResult(null);
+    try {
+      const result = await submissionsApi.submit(submitFarmId.trim());
+      setSubmitResult(result);
+      // Clear cert from frontend state after submission
+      setFirmaLoaded(false);
+      setCertB64(null);
+      setCertPassword(null);
+      firmaApi.purgeCert().catch(function () {});
+    } catch (err: any) {
+      setSubmitError(err?.error || 'Error al enviar a IUWS');
+    } finally {
+      setSubmitLoading(false);
+    }
   };
 
   const renderRecintosTab = function () {
@@ -303,6 +353,73 @@ export const CUEMainPanel: React.FC = () => {
     // Tab content
     React.createElement('div', { className: 'min-h-[200px]' },
       renderTabContent()
+    ),
+
+    // =========================================================================
+    // Submit section (Enviar a IUWS)
+    // =========================================================================
+    React.createElement('div', { className: 'bg-white rounded-lg shadow p-4' },
+      React.createElement('h3', { className: 'text-md font-bold text-gray-900 mb-3' }, 'Enviar a administración'),
+
+      // Vía B — Certificado personal flow
+      React.createElement('p', { className: 'text-xs text-gray-500 mb-3' },
+        'Vía B — Certificado personal: si la entidad habilitada no tiene sello de empresa, ',
+        'suba su certificado digital (.p12/.pfx) para firma mTLS ante IUWS.'
+      ),
+
+      // Farm ID input
+      React.createElement('div', { className: 'mb-3' },
+        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' },
+          'ID de la explotación'
+        ),
+        React.createElement('input', {
+          type: 'text',
+          value: submitFarmId,
+          onChange: function (e: React.ChangeEvent<HTMLInputElement>) {
+            setSubmitFarmId(e.target.value);
+          },
+          placeholder: 'ID de la explotación a enviar...',
+          className: 'border border-gray-300 rounded px-3 py-2 w-full text-sm',
+        })
+      ),
+
+      // FirmaWidget
+      React.createElement(FirmaWidget, {
+        onCertLoaded: handleCertLoaded,
+        onClear: handleCertClear,
+        certLoaded: firmaLoaded,
+        loading: submitLoading,
+      }),
+
+      // Submit button
+      React.createElement('div', { className: 'mt-4' },
+        React.createElement('button', {
+          onClick: handleSubmit,
+          disabled: !submitFarmId.trim() || submitLoading,
+          className: 'w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50',
+        },
+          submitLoading ? 'Enviando...' : 'Enviar a IUWS'
+        )
+      ),
+
+      // Error alert
+      submitError && React.createElement('div', { className: 'mt-3 bg-red-50 border border-red-200 rounded p-3 flex items-center gap-2' },
+        React.createElement(AlertCircle, { className: 'h-4 w-4 text-red-500 flex-shrink-0' }),
+        React.createElement('span', { className: 'text-red-700 text-sm' }, submitError)
+      ),
+
+      // Success alert
+      submitResult && React.createElement('div', { className: 'mt-3 bg-green-50 border border-green-200 rounded p-3' },
+        React.createElement('div', { className: 'flex items-center gap-2' },
+          React.createElement('span', { className: 'text-green-600 text-sm font-medium' }, '✓ Enviado correctamente'),
+          React.createElement('span', { className: 'text-green-500 text-xs' },
+            'Ticket: ' + (submitResult.idTicket || 'pendiente')
+          )
+        ),
+        submitResult.comunidad && React.createElement('div', { className: 'text-xs text-green-500 mt-1' },
+          'Comunidad: ' + submitResult.comunidad
+        )
+      )
     )
   );
 };
