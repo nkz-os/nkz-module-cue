@@ -42,3 +42,6 @@ export const moduleSlots: ModuleViewerSlots = {
     },
   ],
 };
+
+/** Alias for host integration */
+export const viewerSlots = moduleSlots;

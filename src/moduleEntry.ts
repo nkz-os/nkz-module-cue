@@ -11,6 +11,4 @@ if (window.__NKZ__) {
     main: App,
     version: pkg.version,
   });
-} else {
-  console.error(`[${MODULE_ID}] window.__NKZ__ not found! Module registration failed.`);
 }
