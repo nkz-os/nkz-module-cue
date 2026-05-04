@@ -72,6 +72,7 @@ export const explotacionesApi = {
   create: (data: any) => cuePost('/explotaciones', data),
   update: (id: string, data: any) => cuePut(`/explotaciones/${id}`, data),
   delete: (id: string) => cueDelete(`/explotaciones/${id}`),
+  restore: (id: string) => cuePost(`/explotaciones/${id}/restore`, {}),
   listParcelas: (farmId: string) => cueGet(`/explotaciones/${farmId}/parcelas`),
 };
 
@@ -80,6 +81,7 @@ export const parcelasApi = {
   create: (data: any) => cuePost('/parcelas', data),
   update: (id: string, data: any) => cuePut(`/parcelas/${id}`, data),
   delete: (id: string) => cueDelete(`/parcelas/${id}`),
+  restore: (id: string) => cuePost(`/parcelas/${id}/restore`, {}),
   listDeclaraciones: (parcelId: string) => cueGet(`/parcelas/${parcelId}/declaraciones`),
 };
 
@@ -88,6 +90,7 @@ export const declaracionesApi = {
   create: (data: any) => cuePost('/declaraciones', data),
   update: (id: string, data: any) => cuePut(`/declaraciones/${id}`, data),
   delete: (id: string) => cueDelete(`/declaraciones/${id}`),
+  restore: (id: string) => cuePost(`/declaraciones/${id}/restore`, {}),
   duplicar: (id: string, campanya?: number) => cuePost(`/declaraciones/${id}/duplicar`, { campanya }),
 };
 
@@ -98,6 +101,7 @@ export const recintosApi = {
   createBatch: (recintos: any[]) => cuePost('/recintos/batch', { recintos }),
   update: (id: string, data: any) => cuePut(`/recintos/${id}`, data),
   delete: (id: string) => cueDelete(`/recintos/${id}`),
+  restore: (id: string) => cuePost(`/recintos/${id}/restore`, {}),
 };
 
 export const tratamientosApi = {
@@ -106,6 +110,7 @@ export const tratamientosApi = {
   create: (data: any) => cuePost('/tratamientos', data),
   update: (id: string, data: any) => cuePut(`/tratamientos/${id}`, data),
   delete: (id: string) => cueDelete(`/tratamientos/${id}`),
+  restore: (id: string) => cuePost(`/tratamientos/${id}/restore`, {}),
   validate: (data: any) => cuePost('/validate', data),
 };
 
@@ -115,6 +120,7 @@ export const fertilizacionesApi = {
   create: (data: any) => cuePost('/fertilizaciones', data),
   update: (id: string, data: any) => cuePut(`/fertilizaciones/${id}`, data),
   delete: (id: string) => cueDelete(`/fertilizaciones/${id}`),
+  restore: (id: string) => cuePost(`/fertilizaciones/${id}/restore`, {}),
 };
 
 export const catalogosApi = {

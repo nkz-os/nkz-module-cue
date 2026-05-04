@@ -8,10 +8,11 @@ import { FertilizacionList } from './FertilizacionList';
 import { FertilizacionForm } from './FertilizacionForm';
 import { CatalogoPanel } from './CatalogoPanel';
 import { RecintoForm } from './RecintoForm';
-import { recintosApi, declaracionesApi, firmaApi, submissionsApi } from '../services/cueApi';
+import { RecintoBatchForm } from './RecintoBatchForm';
+import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi } from '../services/cueApi';
 import { FirmaWidget } from './FirmaWidget';
 
-type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos';
+type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos' | 'comunidades';
 type ViewMode = 'list' | 'create' | 'edit';
 
 const TABS: { id: TabId; label: string }[] = [
@@ -20,6 +21,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'fertilizaciones', label: 'Fertilizaciones' },
   { id: 'catalogos', label: 'Catálogos' },
   { id: 'recintos', label: 'Recintos' },
+  { id: 'comunidades', label: 'Comunidades' },
 ];
 
 export const CUEMainPanel: React.FC = () => {
@@ -28,6 +30,12 @@ export const CUEMainPanel: React.FC = () => {
   const [mode, setMode] = useState<ViewMode>('list');
 
   // Recintos tab state
+  const [batchRecintos, setBatchRecintos] = useState(false);
+
+  // Comunidades tab state
+  const [endpoints, setEndpoints] = useState<any[]>([]);
+  const [loadingEndpoints, setLoadingEndpoints] = useState(false);
+
   const [declarationId, setDeclarationId] = useState('');
   const [recintoList, setRecintoList] = useState<any[]>([]);
   const [recintoListLoading, setRecintoListLoading] = useState(false);
@@ -95,6 +103,17 @@ export const CUEMainPanel: React.FC = () => {
       fetchRecintos();
     }
   }, [activeTab, declarationId, fetchRecintos]);
+
+  // Fetch endpoints when Comunidades tab is selected
+  useEffect(function () {
+    if (activeTab === 'comunidades') {
+      setLoadingEndpoints(true);
+      catalogosApi.endpointsAutonomicos()
+        .then((data: any) => setEndpoints(Array.isArray(data) ? data : []))
+        .catch(() => setEndpoints([]))
+        .finally(() => setLoadingEndpoints(false));
+    }
+  }, [activeTab]);
 
   const handleRecintoNew = function () {
     setSelectedRecinto(null);
@@ -214,7 +233,13 @@ export const CUEMainPanel: React.FC = () => {
         ? React.createElement('div', { className: 'text-center py-12 text-gray-400' },
             React.createElement('p', { className: 'text-sm' }, 'Seleccione una línea de declaración primero')
           )
-        : recintoListLoading
+        : batchRecintos
+          ? React.createElement(RecintoBatchForm, {
+              key: 'batch',
+              declaracionId: declarationId.trim(),
+              onSaved: fetchRecintos,
+            })
+          : recintoListLoading
           ? React.createElement('div', { className: 'flex justify-center py-8' },
               React.createElement(Loader2, { className: 'h-6 w-6 animate-spin text-green-600' })
             )
@@ -232,13 +257,19 @@ export const CUEMainPanel: React.FC = () => {
                     React.createElement('span', { className: 'text-sm font-medium text-gray-700' },
                       recintoList.length + ' recinto(s)'
                     ),
+                    React.createElement('div', { className: 'flex items-center gap-2' },
                     React.createElement('button', {
                       onClick: handleRecintoNew,
                       className: 'bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 flex items-center gap-1',
                     },
                       React.createElement(Plus, { className: 'h-3.5 w-3.5' }),
                       'Nuevo'
-                    )
+                    ),
+                    React.createElement('button', {
+                      onClick: () => setBatchRecintos(!batchRecintos),
+                      className: 'px-3 py-1.5 text-xs rounded ' + (batchRecintos ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'),
+                    }, batchRecintos ? 'Individual' : 'Crear en lote')
+                  )
                   ),
                   React.createElement('div', { className: 'space-y-1 max-h-[400px] overflow-y-auto' },
                     recintoList.map(function (recinto: any, i: number) {
@@ -322,6 +353,49 @@ export const CUEMainPanel: React.FC = () => {
         return React.createElement(CatalogoPanel, null);
       case 'recintos':
         return renderRecintosTab();
+      case 'comunidades':
+        return React.createElement('div', { className: 'space-y-4' },
+          React.createElement('h3', { className: 'text-lg font-bold' }, 'Endpoints IUWS por Comunidad Autónoma'),
+
+          loadingEndpoints && React.createElement('div', { className: 'text-gray-500 text-sm' }, 'Cargando...'),
+
+          !loadingEndpoints && endpoints.length === 0 &&
+            React.createElement('div', { className: 'text-gray-400 text-sm' }, 'No hay endpoints configurados'),
+
+          !loadingEndpoints && endpoints.length > 0 &&
+            React.createElement('div', { className: 'overflow-x-auto' },
+              React.createElement('table', { className: 'w-full text-sm' },
+                React.createElement('thead', null,
+                  React.createElement('tr', { className: 'border-b' },
+                    React.createElement('th', { className: 'text-left p-2' }, 'Provincia'),
+                    React.createElement('th', { className: 'text-left p-2' }, 'Comunidad'),
+                    React.createElement('th', { className: 'text-left p-2' }, 'URL IUWS'),
+                    React.createElement('th', { className: 'text-left p-2' }, 'Sandbox'),
+                    React.createElement('th', { className: 'text-center p-2' }, 'Activo')
+                  )
+                ),
+                React.createElement('tbody', null,
+                  endpoints.map(function (ep: any) {
+                    return React.createElement('tr', { key: ep.codigo_provincia, className: 'border-b hover:bg-gray-50' },
+                      React.createElement('td', { className: 'p-2 font-mono' }, ep.codigo_provincia),
+                      React.createElement('td', { className: 'p-2' }, ep.comunidad),
+                      React.createElement('td', { className: 'p-2 text-xs font-mono truncate max-w-[200px]' }, ep.iuws_base_url),
+                      React.createElement('td', { className: 'p-2 text-xs text-gray-400' }, ep.sandbox_url || '—'),
+                      React.createElement('td', { className: 'p-2 text-center' },
+                        ep.activo
+                          ? React.createElement('span', { className: 'text-green-600' }, '✓')
+                          : React.createElement('span', { className: 'text-red-400' }, '—')
+                      )
+                    );
+                  })
+                )
+              )
+            ),
+
+          React.createElement('div', { className: 'bg-blue-50 text-blue-700 p-3 rounded text-xs' },
+            'Los endpoints IUWS son específicos de cada comunidad autónoma. Se resuelven automáticamente a partir del código provincial del REGEPA de la explotación.'
+          )
+        );
       default:
         return null;
     }

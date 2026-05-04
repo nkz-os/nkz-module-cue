@@ -481,6 +481,17 @@ def delete_explotacion(farm_id):
     return jsonify({'status': 'deleted', 'id': farm_id})
 
 
+@cue_bp.route('/explotaciones/<farm_id>/restore', methods=['POST'])
+@require_auth
+def restore_explotacion(farm_id):
+    """Restore a soft-deleted AgriFarm (set isActive=true)."""
+    tenant = get_current_tenant()
+    status, result = update_entity('AgriFarm', tenant, farm_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': farm_id}), 200
+    return jsonify(result), status
+
+
 # ===========================================================================
 # AgriParcel routes
 # ===========================================================================
@@ -599,6 +610,17 @@ def delete_parcela(parcel_id):
     return jsonify({'status': 'deleted', 'id': parcel_id})
 
 
+@cue_bp.route('/parcelas/<parcel_id>/restore', methods=['POST'])
+@require_auth
+def restore_parcela(parcel_id):
+    """Restore a soft-deleted AgriParcel."""
+    tenant = get_current_tenant()
+    status, result = update_entity('AgriParcel', tenant, parcel_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': parcel_id}), 200
+    return jsonify(result), status
+
+
 # ===========================================================================
 # AgriCropDeclaration routes
 # ===========================================================================
@@ -709,6 +731,17 @@ def delete_declaracion(decl_id):
     if status not in (200, 204):
         return jsonify({'error': resp}), status
     return jsonify({'status': 'deleted', 'id': decl_id})
+
+
+@cue_bp.route('/declaraciones/<decl_id>/restore', methods=['POST'])
+@require_auth
+def restore_declaracion(decl_id):
+    """Restore a soft-deleted AgriCropDeclaration."""
+    tenant = get_current_tenant()
+    status, result = update_entity('AgriCropDeclaration', tenant, decl_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': decl_id}), 200
+    return jsonify(result), status
 
 
 @cue_bp.route('/declaraciones/<decl_id>/duplicar', methods=['POST'])
@@ -1035,6 +1068,17 @@ def delete_recinto(enclosure_id):
     return jsonify({'status': 'deleted', 'id': enclosure_id})
 
 
+@cue_bp.route('/recintos/<enclosure_id>/restore', methods=['POST'])
+@require_auth
+def restore_recinto(enclosure_id):
+    """Restore a soft-deleted SigpacEnclosure."""
+    tenant = get_current_tenant()
+    status, result = update_entity('SigpacEnclosure', tenant, enclosure_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': enclosure_id}), 200
+    return jsonify(result), status
+
+
 # =========================================================================
 # AGRIPESTTREATMENT ROUTES (mandatory since 1-ene-2026)
 # =========================================================================
@@ -1164,6 +1208,17 @@ def delete_tratamiento(tratamiento_id):
     return jsonify(result), status
 
 
+@cue_bp.route('/tratamientos/<tratamiento_id>/restore', methods=['POST'])
+@require_auth
+def restore_tratamiento(tratamiento_id):
+    """Restore a soft-deleted AgriPestTreatment."""
+    tenant = get_current_tenant()
+    status, result = update_entity('AgriPestTreatment', tenant, tratamiento_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': tratamiento_id}), 200
+    return jsonify(result), status
+
+
 # =========================================================================
 # AGRIFERTILIZERAPPLICATION ROUTES (mandatory since 1-ene-2026)
 # =========================================================================
@@ -1278,6 +1333,17 @@ def delete_fertilizacion(fertilizacion_id):
     status, result = delete_entity('AgriFertilizerApplication', tenant, fertilizacion_id)
     if status == 204:
         return jsonify({'status': 'deleted'}), 200
+    return jsonify(result), status
+
+
+@cue_bp.route('/fertilizaciones/<fertilizacion_id>/restore', methods=['POST'])
+@require_auth
+def restore_fertilizacion(fertilizacion_id):
+    """Restore a soft-deleted AgriFertilizerApplication."""
+    tenant = get_current_tenant()
+    status, result = update_entity('AgriFertilizerApplication', tenant, fertilizacion_id, {'isActive': _property(True)})
+    if status == 204:
+        return jsonify({'status': 'restored', 'id': fertilizacion_id}), 200
     return jsonify(result), status
 
 
