@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface GestorFarmSelectorProps {
-  onSelectFarm: (tenantId: string) => void;
+  onSelectFarm: (tenantId: string, farmerName: string) => void;
 }
 
 export const GestorFarmSelector: React.FC<GestorFarmSelectorProps> = ({ onSelectFarm }) => {
@@ -19,9 +19,11 @@ export const GestorFarmSelector: React.FC<GestorFarmSelectorProps> = ({ onSelect
   }, []);
 
   const handleSelect = (e: any) => {
+    const idx = e.target.selectedIndex;
     const tenantId = e.target.value;
+    const farmerName = idx > 0 && tenants[idx - 1] ? (tenants[idx - 1].farmer_name || tenants[idx - 1].farmer_tenant) : tenantId;
     setSelected(tenantId);
-    if (tenantId) onSelectFarm(tenantId);
+    if (tenantId) onSelectFarm(tenantId, farmerName);
   };
 
   if (loading) {

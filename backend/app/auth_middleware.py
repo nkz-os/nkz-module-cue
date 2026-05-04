@@ -4,16 +4,46 @@
 # =============================================================================
 # Trusts API Gateway validation — decodes token without signature verification.
 # Extracts tenant from X-Tenant-ID header (set by API Gateway).
+# Integrated gestor cross-tenant support — transparent to all routes.
 
 import os
 import logging
 from functools import wraps
 from flask import request, jsonify, g
 import jwt
+import psycopg2
 
 logger = logging.getLogger(__name__)
 
 TRUST_API_GATEWAY = os.getenv('TRUST_API_GATEWAY', 'true').lower() == 'true'
+GESTOR_ROLE = 'GestorCUE'
+POSTGRES_URL = os.getenv(
+    'POSTGRES_URL',
+    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
+)
+
+
+def _validate_gestor_access(gestor_sub, farmer_tenant):
+    """Check gestor authorization record for a farmer tenant. Returns bool."""
+    conn = None
+    cur = None
+    try:
+        conn = psycopg2.connect(POSTGRES_URL)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM cue_gestor_autorizaciones "
+            "WHERE gestor_sub = %s AND farmer_tenant = %s AND autorizado = true",
+            (gestor_sub, farmer_tenant)
+        )
+        return cur.fetchone() is not None
+    except Exception as e:
+        logger.error(f"Error validating gestor access: {e}")
+        return False
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 def get_request_token():
@@ -65,6 +95,26 @@ def require_auth(f):
             g.username = payload.get('preferred_username')
             g.email = payload.get('email')
             g.roles = payload.get('realm_access', {}).get('roles', [])
+
+            # ── Gestor cross-tenant support ──
+            if GESTOR_ROLE in g.roles:
+                g.gestor_mode = True
+                g.gestor_sub = g.user_id
+                target_tenant = (
+                    request.headers.get('X-Gestor-Target-Tenant')
+                    or request.args.get('gestor_tenant')
+                )
+                if target_tenant and target_tenant != g.tenant:
+                    if _validate_gestor_access(g.user_id, target_tenant):
+                        g.tenant = target_tenant
+                        g.tenant_id = target_tenant
+                        g.gestor_target_tenant = target_tenant
+                    else:
+                        return jsonify({
+                            'error': 'No está autorizado para gestionar este tenant',
+                            'gestor_sub': g.user_id,
+                            'target_tenant': target_tenant,
+                        }), 403
 
             return f(*args, **kwargs)
 

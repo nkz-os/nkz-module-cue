@@ -17,9 +17,25 @@ const getApiUrl = (): string => {
 };
 
 // Generic GET/POST wrappers
+
+let _gestorTargetTenant: string | null = null;
+
+export function setGestorTargetTenant(tenantId: string | null) {
+  _gestorTargetTenant = tenantId;
+}
+
+export function getGestorTargetTenant(): string | null {
+  return _gestorTargetTenant;
+}
+
+function appendGestorParam(url: URL): void {
+  if (_gestorTargetTenant) url.searchParams.set('gestor_tenant', _gestorTargetTenant);
+}
+
 export async function cueGet(path: string, params?: Record<string, string>): Promise<any> {
   const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
+  appendGestorParam(url);
   const response = await fetch(url.toString(), { credentials: 'include' });
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
@@ -29,7 +45,9 @@ export async function cueGet(path: string, params?: Record<string, string>): Pro
 }
 
 export async function cuePost(path: string, data: any): Promise<any> {
-  const response = await fetch(`${getApiUrl()}/api/modules/cue${path}`, {
+  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  appendGestorParam(url);
+  const response = await fetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -41,7 +59,9 @@ export async function cuePost(path: string, data: any): Promise<any> {
 }
 
 export async function cuePut(path: string, data: any): Promise<any> {
-  const response = await fetch(`${getApiUrl()}/api/modules/cue${path}`, {
+  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  appendGestorParam(url);
+  const response = await fetch(url.toString(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -55,7 +75,9 @@ export async function cuePut(path: string, data: any): Promise<any> {
 }
 
 export async function cueDelete(path: string): Promise<void> {
-  const response = await fetch(`${getApiUrl()}/api/modules/cue${path}`, {
+  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  appendGestorParam(url);
+  const response = await fetch(url.toString(), {
     method: 'DELETE',
     credentials: 'include',
   });
@@ -145,27 +167,19 @@ export const submissionsApi = {
   list: (filters?: Record<string, string>) => cueGet('/submissions', filters),
 };
 
-// Gestor mode: tenant switching
-let _gestorTargetTenant: string | null = null;
-
-export function setGestorTargetTenant(tenantId: string | null) {
-  _gestorTargetTenant = tenantId;
-}
-
-export function getGestorTargetTenant(): string | null {
-  return _gestorTargetTenant;
-}
-
 export const gestorApi = {
   tenants: () => cueGet('/gestor/tenants'),
   submissions: (filters?: Record<string, string>) => cueGet('/gestor/submissions', filters),
-  switchTenant: (tenantId: string) => cuePost('/gestor/switch-tenant', { tenant_id: tenantId }),
+  solicitarAcceso: (farmerEmail: string) =>
+    cuePost('/gestor/solicitar-acceso', { farmer_email: farmerEmail }),
 };
 
 // Authorization management (farmer side)
 export const autorizacionesApi = {
   list: () => cueGet('/gestor/mis-autorizaciones'),
-  solicitar: (gestorSub: string, gestorUsername: string, gestorTenant: string) =>
-    cuePost('/gestor/solicitar', { gestor_sub: gestorSub, gestor_username: gestorUsername, gestor_tenant: gestorTenant }),
+  solicitar: (gestorEmail: string) =>
+    cuePost('/gestor/solicitar', { gestor_email: gestorEmail }),
   revocar: (id: number) => cueDelete(`/gestor/autorizar/${id}`),
+  aprobar: (id: number) => cuePut(`/gestor/autorizar/${id}/aprobar`, {}),
+  rechazar: (id: number) => cuePut(`/gestor/autorizar/${id}/rechazar`, {}),
 };

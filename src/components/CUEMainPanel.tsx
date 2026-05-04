@@ -10,7 +10,7 @@ import { FertilizacionForm } from './FertilizacionForm';
 import { CatalogoPanel } from './CatalogoPanel';
 import { RecintoForm } from './RecintoForm';
 import { RecintoBatchForm } from './RecintoBatchForm';
-import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi } from '../services/cueApi';
+import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi, setGestorTargetTenant, autorizacionesApi, gestorApi } from '../services/cueApi';
 import { FirmaWidget } from './FirmaWidget';
 import { GestorDashboard } from './GestorDashboard';
 import { GestorFarmSelector } from './GestorFarmSelector';
@@ -60,15 +60,21 @@ export const CUEMainPanel: React.FC = () => {
 
   // Gestor mode state
   const [isGestor, setIsGestor] = useState(false);
-  const [gestorTargetTenant, setGestorTargetTenant] = useState<string | null>(null);
+  const [gestorTargetTenant, setGestorTargetTenantState] = useState<string | null>(null);
+  const [gestorTargetFarmName, setGestorTargetFarmName] = useState<string | null>(null);
   const [gestorView, setGestorView] = useState<'dashboard' | 'farm'>('dashboard');
 
   // Gestoria tab state (farmer side — authorization management)
   const [autorizaciones, setAutorizaciones] = useState<any[]>([]);
   const [loadingAuth, setLoadingAuth] = useState(false);
-  const [gestorSub, setGestorSub] = useState('');
-  const [gestorUsername, setGestorUsername] = useState('');
-  const [gestorTenant, setGestorTenant] = useState('');
+  const [gestorEmail, setGestorEmail] = useState('');
+  const [authorizing, setAuthorizing] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Gestor-side: solicitar acceso state
+  const [solicitarEmail, setSolicitarEmail] = useState('');
+  const [solicitandoAcceso, setSolicitandoAcceso] = useState(false);
+  const [solicitudResult, setSolicitudResult] = useState<string | null>(null);
 
   const handleSelect = (entity: any) => {
     setSelectedEntity(entity);
@@ -139,6 +145,7 @@ export const CUEMainPanel: React.FC = () => {
     const roles = ctx?.roles || [];
     if (roles.includes('GestorCUE')) {
       setIsGestor(true);
+      setGestorTargetTenant(null); // reset module-level gestor state
     }
   }, []);
 
@@ -146,9 +153,7 @@ export const CUEMainPanel: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'gestoria') {
       setLoadingAuth(true);
-      const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
-      fetch(apiUrl + '/api/modules/cue/gestor/mis-autorizaciones', { credentials: 'include' })
-        .then(r => r.json())
+      autorizacionesApi.list()
         .then(data => { setAutorizaciones(Array.isArray(data) ? data : []); setLoadingAuth(false); })
         .catch(() => setLoadingAuth(false));
     }
@@ -394,92 +399,141 @@ export const CUEMainPanel: React.FC = () => {
         return renderRecintosTab();
       case 'gestoria':
         return React.createElement('div', { className: 'space-y-4' },
-          React.createElement('h3', { className: 'text-lg font-bold' }, 'Gestoría — Autorizaciones'),
+          React.createElement('h3', { className: 'text-lg font-bold text-gray-900' }, 'Gestoría — Autorizaciones'),
 
-          // Existing authorizations
+          React.createElement('p', { className: 'text-sm text-gray-500' },
+            'Autorice a una gestoría para que pueda gestionar su cuaderno de campo y realizar envíos al IUWS en su nombre. '
+            + 'Solo un gestor puede estar autorizado a la vez.'
+          ),
+
+          // ── Existing authorizations ──
           loadingAuth && React.createElement('div', { className: 'text-gray-400 text-sm' }, 'Cargando...'),
 
           !loadingAuth && autorizaciones.length === 0 &&
-            React.createElement('div', { className: 'text-gray-400 text-sm' }, 'No hay gestores autorizados'),
+            React.createElement('div', { className: 'text-gray-400 text-sm py-4 text-center bg-gray-50 rounded border' },
+              'No hay gestores autorizados ni solicitudes pendientes.'
+            ),
 
           autorizaciones.map(function (a: any) {
-            return React.createElement('div', { key: a.id, className: 'flex items-center justify-between bg-white border rounded p-3' },
-              React.createElement('div', null,
-                React.createElement('div', { className: 'font-medium text-sm' }, a.gestor_username),
-                React.createElement('div', { className: 'text-xs text-gray-400' }, 'Tenant: ' + a.gestor_tenant),
-                React.createElement('div', { className: 'text-xs ' + (a.autorizado ? 'text-green-600' : 'text-red-500') },
-                  a.autorizado ? 'Autorizado' : 'No autorizado'
+            const isPending = !a.autorizado;
+            const isActive = a.autorizado;
+            return React.createElement('div', {
+              key: a.id,
+              className: 'flex items-center justify-between bg-white border rounded-lg p-4 ' +
+                (isPending ? 'border-yellow-300 bg-yellow-50' : 'border-green-200')
+            },
+              React.createElement('div', { className: 'flex-1' },
+                React.createElement('div', { className: 'flex items-center gap-2' },
+                  React.createElement('span', { className: 'font-medium text-sm' }, a.gestor_username),
+                  isActive && React.createElement('span', {
+                    className: 'px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700'
+                  }, 'Activo'),
+                  isPending && React.createElement('span', {
+                    className: 'px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700'
+                  }, 'Pendiente de aprobación')
+                ),
+                React.createElement('div', { className: 'text-xs text-gray-400 mt-1' },
+                  'Autorizado el ' + (a.autorizado_at
+                    ? new Date(a.autorizado_at).toLocaleDateString('es-ES')
+                    : new Date(a.created_at).toLocaleDateString('es-ES'))
                 )
               ),
-              a.autorizado && React.createElement('button', {
-                onClick: function () {
-                  const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
-                  fetch(apiUrl + '/api/modules/cue/gestor/autorizar/' + a.id, { method: 'DELETE', credentials: 'include' })
-                    .then(r => r.json())
-                    .then(() => setAutorizaciones(prev => prev.map(x => x.id === a.id ? { ...x, autorizado: false } : x)))
-                    .catch(() => alert('Error al revocar'));
-                },
-                className: 'px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200'
-              }, 'Revocar')
+              React.createElement('div', { className: 'flex items-center gap-2' },
+                isPending && React.createElement('button', {
+                  onClick: function () {
+                    if (!window.confirm(
+                      '¿Autorizar a ' + a.gestor_username + ' para gestionar su cuaderno de campo?\n\n'
+                      + 'Podrá ver y modificar todos sus datos, y realizar envíos al IUWS en su nombre.'
+                    )) return;
+                    autorizacionesApi.aprobar(a.id)
+                      .then(function () {
+                        setAutorizaciones(function (prev: any[]) {
+                          return prev.map(function (x: any) { return x.id === a.id ? { ...x, autorizado: true } : x; });
+                        });
+                      })
+                      .catch(function (err: any) { alert(err.error || 'Error al aprobar'); });
+                  },
+                  className: 'px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 font-medium'
+                }, 'Aprobar'),
+                isPending && React.createElement('button', {
+                  onClick: function () {
+                    if (!window.confirm('¿Rechazar la solicitud de ' + a.gestor_username + '?')) return;
+                    autorizacionesApi.rechazar(a.id)
+                      .then(function () {
+                        setAutorizaciones(function (prev: any[]) { return prev.filter(function (x: any) { return x.id !== a.id; }); });
+                      })
+                      .catch(function (err: any) { alert(err.error || 'Error al rechazar'); });
+                  },
+                  className: 'px-3 py-1 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300'
+                }, 'Rechazar'),
+                isActive && React.createElement('button', {
+                  onClick: function () {
+                    if (!window.confirm(
+                      '¿Revocar el acceso de ' + a.gestor_username + '?\n\n'
+                      + 'Dejará de poder acceder a su cuaderno de campo inmediatamente.'
+                    )) return;
+                    autorizacionesApi.revocar(a.id)
+                      .then(function () {
+                        setAutorizaciones(function (prev: any[]) {
+                          return prev.map(function (x: any) { return x.id === a.id ? { ...x, autorizado: false } : x; });
+                        });
+                      })
+                      .catch(function (err: any) { alert(err.error || 'Error al revocar'); });
+                  },
+                  className: 'px-3 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 font-medium'
+                }, 'Revocar acceso')
+              )
             );
           }),
 
-          // Add new gestor form
-          React.createElement('div', { className: 'bg-yellow-50 border border-yellow-200 rounded p-4 mt-4' },
-            React.createElement('h4', { className: 'text-sm font-medium text-yellow-800 mb-3' }, 'Autorizar a un gestor'),
-            React.createElement('div', { className: 'space-y-2' },
+          // ── Authorize new gestor form (Fix #1: single email field) ──
+          React.createElement('div', { className: 'bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4' },
+            React.createElement('h4', { className: 'text-sm font-medium text-blue-800 mb-2' }, 'Autorizar a una gestoría'),
+            React.createElement('p', { className: 'text-xs text-blue-600 mb-3' },
+              'Introduzca el email del gestor. El sistema verificará que tiene el rol GestorCUE y lo autorizará automáticamente.'
+            ),
+            authError && React.createElement('div', { className: 'mb-3 bg-red-50 border border-red-200 rounded p-2 text-xs text-red-600' }, authError),
+            React.createElement('div', { className: 'flex gap-2' },
               React.createElement('input', {
-                type: 'text',
-                value: gestorSub,
-                onChange: (e: any) => setGestorSub(e.target.value),
-                placeholder: 'ID del gestor (Keycloak sub)',
-                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
-              }),
-              React.createElement('input', {
-                type: 'text',
-                value: gestorUsername,
-                onChange: (e: any) => setGestorUsername(e.target.value),
-                placeholder: 'Email o username del gestor',
-                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
-              }),
-              React.createElement('input', {
-                type: 'text',
-                value: gestorTenant,
-                onChange: (e: any) => setGestorTenant(e.target.value),
-                placeholder: 'Tenant del gestor',
-                className: 'border border-yellow-300 rounded px-3 py-1.5 w-full text-xs'
+                type: 'email',
+                value: gestorEmail,
+                onChange: function (e: any) { setGestorEmail(e.target.value); setAuthError(null); },
+                onKeyDown: function (e: any) { if (e.key === 'Enter') { e.preventDefault(); } },
+                placeholder: 'email@gestoria.com',
+                className: 'border border-blue-300 rounded px-3 py-2 flex-1 text-sm'
               }),
               React.createElement('button', {
                 onClick: function () {
-                  if (!gestorSub || !gestorUsername) { alert('Rellene los campos obligatorios'); return; }
-                  const apiUrl = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
-                  fetch(apiUrl + '/api/modules/cue/gestor/solicitar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ gestor_sub: gestorSub, gestor_username: gestorUsername, gestor_tenant: gestorTenant })
-                  })
-                    .then(r => r.json())
-                    .then(data => {
-                      if (data.error) { alert(data.error); return; }
-                      setGestorSub(''); setGestorUsername(''); setGestorTenant('');
+                  var email = gestorEmail.trim();
+                  if (!email) { setAuthError('Introduzca un email'); return; }
+                  if (!window.confirm(
+                    '¿Autorizar a ' + email + ' para gestionar su cuaderno de campo?\n\n'
+                    + 'Esta persona/empresa podrá:\n'
+                    + '• Ver y modificar todos sus datos de explotación\n'
+                    + '• Gestionar tratamientos, fertilizaciones y recintos\n'
+                    + '• Realizar envíos oficiales al IUWS en su nombre\n\n'
+                    + 'Puede revocar este acceso en cualquier momento.'
+                  )) return;
+                  setAuthorizing(true);
+                  setAuthError(null);
+                  autorizacionesApi.solicitar(email)
+                    .then(function (data: any) {
+                      setGestorEmail('');
+                      setAuthorizing(false);
                       // Refresh list
-                      const apiUrl2 = (window as any).__ENV__?.VITE_API_URL || 'https://nkz.robotika.cloud';
-                      fetch(apiUrl2 + '/api/modules/cue/gestor/mis-autorizaciones', { credentials: 'include' })
-                        .then(r => r.json())
-                        .then(d => setAutorizaciones(Array.isArray(d) ? d : []));
+                      autorizacionesApi.list()
+                        .then(function (d: any) { setAutorizaciones(Array.isArray(d) ? d : []); });
                     })
-                    .catch(err => alert('Error: ' + err.message));
+                    .catch(function (err: any) {
+                      setAuthError(err.error || 'Error al autorizar');
+                      setAuthorizing(false);
+                    });
                 },
-                disabled: !gestorSub || !gestorUsername,
-                className: 'w-full px-3 py-1.5 text-xs rounded text-white ' +
-                  (!gestorSub || !gestorUsername ? 'bg-gray-300' : 'bg-green-600 hover:bg-green-700')
-              }, 'Autorizar gestor')
+                disabled: !gestorEmail.trim() || authorizing,
+                className: 'px-4 py-2 text-sm rounded text-white font-medium whitespace-nowrap ' +
+                  (!gestorEmail.trim() || authorizing ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700')
+              }, authorizing ? 'Autorizando...' : 'Autorizar gestor')
             )
-          ),
-
-          React.createElement('p', { className: 'text-xs text-gray-400 mt-2' },
-            'Al autorizar a un gestor, podrá acceder a sus datos de cuaderno de campo y gestionar envíos al IUWS en su nombre.'
           )
         );
       case 'comunidades':
@@ -532,21 +586,75 @@ export const CUEMainPanel: React.FC = () => {
 
   // Gestor: show consolidated dashboard
   if (isGestor && gestorView === 'dashboard') {
-    return React.createElement(GestorDashboard, {
-      onSelectSubmission: function (sub: any) {
-        setGestorTargetTenant(sub.tenant_id);
-        setGestorView('farm');
-      }
-    });
+    return React.createElement('div', { className: 'space-y-4' },
+      // "Solicitar acceso" section (Fix #5)
+      React.createElement('div', { className: 'bg-white border rounded-lg p-4' },
+        React.createElement('h4', { className: 'text-sm font-medium text-gray-700 mb-2' }, 'Solicitar acceso a nueva explotación'),
+        React.createElement('p', { className: 'text-xs text-gray-500 mb-3' },
+          'Introduzca el email del agricultor para solicitar acceso a su cuaderno de campo. El agricultor deberá aprobar la solicitud desde su pestaña Gestoría.'
+        ),
+        solicitudResult && React.createElement('div', { className: 'mb-3 bg-green-50 border border-green-200 rounded p-2 text-xs text-green-700' }, solicitudResult),
+        React.createElement('div', { className: 'flex gap-2' },
+          React.createElement('input', {
+            type: 'email',
+            value: solicitarEmail,
+            onChange: function (e: any) { setSolicitarEmail(e.target.value); setSolicitudResult(null); },
+            onKeyDown: function (e: any) { if (e.key === 'Enter') { e.preventDefault(); } },
+            placeholder: 'email@agricultor.com',
+            className: 'border border-gray-300 rounded px-3 py-2 flex-1 text-sm'
+          }),
+          React.createElement('button', {
+            onClick: function () {
+              var email = solicitarEmail.trim();
+              if (!email) return;
+              setSolicitandoAcceso(true);
+              setSolicitudResult(null);
+              gestorApi.solicitarAcceso(email)
+                .then(function (data: any) {
+                  setSolicitarEmail('');
+                  setSolicitudResult(data.message || 'Solicitud enviada correctamente');
+                  setSolicitandoAcceso(false);
+                })
+                .catch(function (err: any) {
+                  setSolicitudResult(err.error || 'Error al solicitar acceso');
+                  setSolicitandoAcceso(false);
+                });
+            },
+            disabled: !solicitarEmail.trim() || solicitandoAcceso,
+            className: 'px-4 py-2 text-sm rounded text-white font-medium whitespace-nowrap ' +
+              (!solicitarEmail.trim() || solicitandoAcceso ? 'bg-gray-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700')
+          }, solicitandoAcceso ? 'Solicitando...' : 'Solicitar acceso')
+        )
+      ),
+      React.createElement(GestorDashboard, {
+        onSelectSubmission: function (sub: any) {
+          setGestorTargetTenantState(sub.tenant_id);
+          setGestorTargetFarmName(sub.farmer_name || sub.tenant_id);
+          setGestorTargetTenant(sub.tenant_id);
+          setGestorView('farm');
+        },
+        onManageFarm: function () {
+          setGestorView('farm');
+        }
+      })
+    );
   }
 
   // Gestor: show farm selector before entering a specific farm
   if (isGestor && gestorView === 'farm' && !gestorTargetTenant) {
-    return React.createElement(GestorFarmSelector, {
-      onSelectFarm: function (tenantId: string) {
-        setGestorTargetTenant(tenantId);
-      }
-    });
+    return React.createElement('div', { className: 'space-y-4' },
+      React.createElement('button', {
+        onClick: function () { setGestorView('dashboard'); },
+        className: 'text-sm text-blue-600 hover:underline'
+      }, '← Volver al dashboard'),
+      React.createElement(GestorFarmSelector, {
+        onSelectFarm: function (tenantId: string, farmerName: string) {
+          setGestorTargetTenantState(tenantId);
+          setGestorTargetFarmName(farmerName || tenantId);
+          setGestorTargetTenant(tenantId);
+        }
+      })
+    );
   }
 
   return React.createElement(SlotShell, { moduleId: 'cue', accent: cueAccent },
@@ -557,14 +665,24 @@ export const CUEMainPanel: React.FC = () => {
       React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, 'SIEX (RD 1054/2022)')
     ),
 
-    // Gestor banner when managing a specific farm
-    isGestor && gestorTargetTenant && React.createElement('div', { className: 'flex items-center justify-between bg-blue-50 border border-blue-200 rounded p-2 mb-3' },
-      React.createElement('span', { className: 'text-sm text-blue-700' },
-        'Gestionando: ' + gestorTargetTenant
+    // Gestor banner when managing a specific farm (Fix #4: show farmer_name)
+    isGestor && gestorTargetTenant && React.createElement('div', { className: 'flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3' },
+      React.createElement('div', null,
+        React.createElement('span', { className: 'text-sm font-medium text-blue-800' },
+          'Gestionando: ' + (gestorTargetFarmName || gestorTargetTenant)
+        ),
+        React.createElement('span', { className: 'text-xs text-blue-500 ml-2' },
+          '(' + gestorTargetTenant + ')'
+        )
       ),
       React.createElement('button', {
-        onClick: function () { setGestorTargetTenant(null); setGestorView('dashboard'); },
-        className: 'text-xs text-blue-600 hover:underline'
+        onClick: function () {
+          setGestorTargetTenantState(null);
+          setGestorTargetFarmName(null);
+          setGestorTargetTenant(null);
+          setGestorView('dashboard');
+        },
+        className: 'text-xs text-blue-600 hover:underline font-medium'
       }, '← Volver al dashboard')
     ),
 

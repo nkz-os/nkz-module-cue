@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 
 interface GestorDashboardProps {
   onSelectSubmission?: (submission: any) => void;
+  onManageFarm?: () => void;
 }
 
-export const GestorDashboard: React.FC<GestorDashboardProps> = ({ onSelectSubmission }) => {
+export const GestorDashboard: React.FC<GestorDashboardProps> = ({ onSelectSubmission, onManageFarm }) => {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +59,14 @@ export const GestorDashboard: React.FC<GestorDashboardProps> = ({ onSelectSubmis
   return React.createElement('div', { className: 'space-y-4' },
     // Header
     React.createElement('div', { className: 'flex items-center justify-between' },
-      React.createElement('h3', { className: 'text-lg font-bold text-gray-900' }, 'Envíos a IUWS'),
-      React.createElement('span', { className: 'text-sm text-gray-500' }, submissions.length + ' envíos')
+      React.createElement('div', { className: 'flex items-center gap-3' },
+        React.createElement('h3', { className: 'text-lg font-bold text-gray-900' }, 'Envíos a IUWS'),
+        React.createElement('span', { className: 'text-sm text-gray-500' }, submissions.length + ' envíos')
+      ),
+      React.createElement('button', {
+        onClick: function () { onManageFarm?.(); },
+        className: 'px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-medium'
+      }, 'Gestionar explotación')
     ),
 
     // Filters
