@@ -1,6 +1,6 @@
 # nkz-module-cue — Cuaderno de Campo de Explotación (CUE) / Field Record Book
 
-[![Backend](https://img.shields.io/badge/backend-%E2%9C%85%20Phase%202-brightgreen)]()
+[![Backend](https://img.shields.io/badge/backend-%E2%9C%85%20Phase%204-brightgreen)]()
 [![Frontend](https://img.shields.io/badge/frontend-%E2%9C%85%20Phase%203-brightgreen)]()
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
@@ -203,8 +203,8 @@ All endpoints under `/api/modules/cue`. Authentication: JWT Bearer + `X-Tenant-I
 | **1. Foundation** | NGSI-LD CRUD API, PostGIS spatial cache, JWT auth, K8s deployment, CI/CD | ✅ Complete |
 | **2. Core** | Business rules engine, ETL ROPO+Fertilizantes (SCD Type 2), POST /validate, SIEX vocabulary | ✅ Complete |
 | **3. Frontend** | React IIFE module, entity forms, CesiumJS map, SIGPAC enclosure layer, catalog selectors | ✅ Complete |
-| **4. Integration** | SITNA / IUWS client, XAdES/CAdES digital signature, REA state machine, automated submission | 🔜 Pending |
-| **5. Audit** | Full security review, penetration testing, regulatory compliance verification | 🔜 Pending |
+| **4. Integration** | IUWS client (REA download + CUE submit + status polling), Anti-Corruption Layer (NGSI-LD→XML/XSD), state machine (10 states), AutoFirma ephemeral cert widget, polling worker | ✅ Complete (pending external trámites) |
+| **5. Audit** | Full security review, XSD oficiales FEGA, sandbox IUWS, production deployment with real certificates | 🔜 Pending external dependencies |
 
 ---
 
