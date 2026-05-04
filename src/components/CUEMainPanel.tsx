@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { SlotShell } from '@nekazari/viewer-kit';
 import { Loader2, AlertCircle, Plus, Search } from 'lucide-react';
 import { ExplotacionList } from './ExplotacionList';
 import { ExplotacionForm } from './ExplotacionForm';
@@ -11,8 +12,6 @@ import { RecintoForm } from './RecintoForm';
 import { RecintoBatchForm } from './RecintoBatchForm';
 import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi } from '../services/cueApi';
 import { FirmaWidget } from './FirmaWidget';
-
-const cueAccent = { base: '#EF4444', soft: '#FEE2E2', strong: '#B91C1C' };
 
 type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos' | 'comunidades';
 type ViewMode = 'list' | 'create' | 'edit';
@@ -403,7 +402,8 @@ export const CUEMainPanel: React.FC = () => {
     }
   };
 
-  return React.createElement('div', { className: 'cue-module-panel space-y-4', 'data-module-id': 'cue' },
+  return React.createElement(SlotShell, { moduleId: 'cue', accent: cueAccent },
+    React.createElement('div', { className: 'space-y-4' },
     // Module header
     React.createElement('div', { className: 'bg-white rounded-lg shadow p-4' },
       React.createElement('h2', { className: 'text-lg font-bold text-gray-900' }, 'CUE — Cuaderno de Campo'),
@@ -497,5 +497,5 @@ export const CUEMainPanel: React.FC = () => {
         )
       )
     )
-  );
+  ));
 };

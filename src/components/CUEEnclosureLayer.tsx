@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { SlotShellCompact } from '@nekazari/viewer-kit';
 import { recintosApi } from '../services/cueApi';
 import { Loader2, AlertCircle } from 'lucide-react';
+
+const cueAccent = { base: '#EF4444', soft: '#FEE2E2', strong: '#B91C1C' };
 
 interface CUEEnclosureLayerProps {
   viewer?: any;
@@ -90,7 +93,7 @@ export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = (props) => {
 
   // Loading state
   if (loading) {
-    return React.createElement('div', { className: 'cue-enclosure-panel' },
+    return React.createElement(SlotShellCompact, { moduleId: 'cue', accent: cueAccent },
       React.createElement('div', { className: 'p-2 text-gray-500 text-sm flex items-center gap-2' },
         React.createElement(Loader2, { className: 'h-4 w-4 animate-spin text-green-600' }),
         'Cargando recintos...'
@@ -100,7 +103,7 @@ export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = (props) => {
 
   // Error state
   if (error) {
-    return React.createElement('div', { className: 'cue-enclosure-panel' },
+    return React.createElement(SlotShellCompact, { moduleId: 'cue', accent: cueAccent },
       React.createElement('div', { className: 'p-2 text-red-500 text-sm flex items-center gap-2' },
         React.createElement(AlertCircle, { className: 'h-5 w-5 text-red-500 flex-shrink-0' }),
         error
@@ -110,7 +113,7 @@ export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = (props) => {
 
   // Empty state — no declaration selected
   if (!declarationId) {
-    return React.createElement('div', { className: 'cue-enclosure-panel' },
+    return React.createElement(SlotShellCompact, { moduleId: 'cue', accent: cueAccent },
       React.createElement('div', { className: 'p-2 text-gray-400 text-sm' },
         'Seleccione una línea de declaración para ver sus recintos'
       )
@@ -119,7 +122,7 @@ export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = (props) => {
 
   // Empty state — declaration selected but no recintos
   if (enclosures.length === 0) {
-    return React.createElement('div', { className: 'cue-enclosure-panel' },
+    return React.createElement(SlotShellCompact, { moduleId: 'cue', accent: cueAccent },
       React.createElement('div', { className: 'p-2 text-gray-400 text-sm' },
         'No hay recintos para esta declaración'
       )
@@ -127,7 +130,7 @@ export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = (props) => {
   }
 
   // Normal state: show summary with recinto list
-  return React.createElement('div', { className: 'cue-enclosure-panel' },
+  return React.createElement(SlotShellCompact, { moduleId: 'cue', accent: cueAccent },
     React.createElement('div', { className: 'p-2 text-sm' },
     React.createElement('div', { className: 'font-medium text-gray-800' },
       enclosures.length + ' recintos'
