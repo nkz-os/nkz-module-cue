@@ -57,6 +57,16 @@ spec:
                 secretKeyRef:
                   name: postgresql-secret
                   key: postgres-url
+            - name: MTLS_CERT_PATH
+              value: "/etc/cue/certs/client.crt"
+            - name: MTLS_KEY_PATH
+              value: "/etc/cue/certs/client.key"
+            - name: MTLS_CA_PATH
+              value: "/etc/cue/certs/ca.crt"
+          volumeMounts:
+            - name: certs
+              mountPath: /etc/cue/certs
+              readOnly: true
           resources:
             requests:
               memory: "128Mi"
@@ -78,6 +88,11 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
+      volumes:
+        - name: certs
+          secret:
+            secretName: cue-mtls-certs
+            optional: true
 
 ---
 # Service: CUE Backend

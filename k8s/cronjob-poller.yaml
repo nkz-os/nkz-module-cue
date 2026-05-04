@@ -1,0 +1,67 @@
+---
+# CronJob: IUWS Polling Worker
+# Periodically checks pending IUWS submissions and updates their state
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cue-iuws-poller
+  namespace: nekazari
+  labels:
+    app: cue-iuws-poller
+    component: worker
+    module: cue
+    nekazari.io/profile: addon
+spec:
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: cue-iuws-poller
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: poller
+              image: ghcr.io/nkz-os/nkz-module-cue/cue-backend:latest
+              imagePullPolicy: Always
+              command: ["python3", "-m", "app.integration.iuws_poller"]
+              env:
+                - name: APP_NAME
+                  value: "CUE IUWS Poller"
+                - name: DEBUG
+                  value: "false"
+                - name: POSTGRES_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgresql-secret
+                      key: postgres-url
+                - name: ORION_URL
+                  value: "http://orion-ld-service:1026"
+                - name: MTLS_CERT_PATH
+                  value: "/etc/cue/certs/client.crt"
+                - name: MTLS_KEY_PATH
+                  value: "/etc/cue/certs/client.key"
+                - name: MTLS_CA_PATH
+                  value: "/etc/cue/certs/ca.crt"
+              volumeMounts:
+                - name: certs
+                  mountPath: /etc/cue/certs
+                  readOnly: true
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "100m"
+          volumes:
+            - name: certs
+              secret:
+                secretName: cue-mtls-certs
+                optional: true
