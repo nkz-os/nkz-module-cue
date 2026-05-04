@@ -13,6 +13,8 @@ export const ExplotacionList: React.FC<ExplotacionListProps> = ({ onSelect, onNe
   const [error, setError] = useState<string | null>(null);
   const [searchNombre, setSearchNombre] = useState('');
   const [searchMunicipio, setSearchMunicipio] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -21,6 +23,7 @@ export const ExplotacionList: React.FC<ExplotacionListProps> = ({ onSelect, onNe
       const filters: Record<string, string> = {};
       if (searchNombre.trim()) filters.nombre = searchNombre.trim();
       if (searchMunicipio.trim()) filters.municipio = searchMunicipio.trim();
+      if (showDeleted) filters.incluir_inactivos = 'true';
       const data = await explotacionesApi.list(filters);
       setItems(Array.isArray(data) ? data : data?.data || []);
     } catch (err: any) {
@@ -28,7 +31,14 @@ export const ExplotacionList: React.FC<ExplotacionListProps> = ({ onSelect, onNe
     } finally {
       setLoading(false);
     }
-  }, [searchNombre, searchMunicipio]);
+  }, [searchNombre, searchMunicipio, showDeleted, refreshKey]);
+
+  const handleRestore = (item: any) => {
+    const id = item.id || item.orion_entity_id;
+    explotacionesApi.restore(id)
+      .then(() => setRefreshKey(k => k + 1))
+      .catch((err: any) => alert('Error: ' + (err.error || 'No se pudo restaurar')));
+  };
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -64,7 +74,11 @@ export const ExplotacionList: React.FC<ExplotacionListProps> = ({ onSelect, onNe
       },
         React.createElement(Plus, { className: 'h-4 w-4' }),
         React.createElement('span', null, 'Nueva')
-      )
+      ),
+      React.createElement('button', {
+        onClick: () => setShowDeleted(!showDeleted),
+        className: `px-3 py-1 text-xs rounded h-[38px] ${showDeleted ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-gray-100 text-gray-600 border border-gray-200'}`,
+      }, showDeleted ? 'Papelera' : 'Ver papelera')
     ),
 
     // Content area
@@ -82,21 +96,33 @@ export const ExplotacionList: React.FC<ExplotacionListProps> = ({ onSelect, onNe
               React.createElement('p', { className: 'text-sm' }, 'No hay explotaciones registradas')
             )
           : React.createElement('div', { className: 'space-y-2 max-h-[500px] overflow-y-auto' },
-              items.map((item: any) =>
-                React.createElement('div', {
+              items.map((item: any) => {
+                const isInactive = item.isActive === false || item.is_active === false;
+                return React.createElement('div', {
                   key: item.id || item.entityId,
-                  className: 'bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100',
+                  className: `${isInactive ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'} rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow border`,
                   onClick: () => onSelect(item),
                 },
-                  React.createElement('h3', { className: 'font-semibold text-gray-900' }, item.nombre || 'Sin nombre'),
+                  React.createElement('div', { className: 'flex justify-between items-start' },
+                    React.createElement('h3', { className: 'font-semibold text-gray-900' }, item.nombre || 'Sin nombre'),
+                    isInactive
+                      ? React.createElement('span', { className: 'text-xs text-red-500 font-medium bg-red-100 px-2 py-0.5 rounded' }, 'Inactivo')
+                      : null
+                  ),
                   React.createElement('div', { className: 'text-sm text-gray-500 mt-1' },
                     [item.municipio, item.provincia].filter(Boolean).join(', ') || null
                   ),
                   item.nif
                     ? React.createElement('div', { className: 'text-xs text-gray-400 mt-1' }, 'NIF: ', item.nif)
+                    : null,
+                  isInactive
+                    ? React.createElement('button', {
+                        onClick: (e: React.MouseEvent) => { e.stopPropagation(); handleRestore(item); },
+                        className: 'text-xs text-green-600 hover:text-green-800 underline mt-2',
+                      }, 'Restaurar')
                     : null
-                )
-              )
+                );
+              })
             )
   );
 };

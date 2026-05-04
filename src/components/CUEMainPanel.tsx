@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SlotShell } from '@nekazari/viewer-kit';
 import { Loader2, AlertCircle, Plus, Search } from 'lucide-react';
-
-const cueAccent = { base: '#EF4444', soft: '#FEE2E2', strong: '#B91C1C' };
 import { ExplotacionList } from './ExplotacionList';
 import { ExplotacionForm } from './ExplotacionForm';
 import { TratamientoList } from './TratamientoList';
@@ -499,5 +497,5 @@ export const CUEMainPanel: React.FC = () => {
         )
       )
     )
-  );
+  ));
 };

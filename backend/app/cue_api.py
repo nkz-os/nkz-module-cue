@@ -293,7 +293,10 @@ def _get_iuws_endpoint(codigo_provincia):
 def list_explotaciones():
     """List AgriFarm entities for current tenant with optional filters."""
     tenant = get_current_tenant()
-    q_parts = [_tenant_filter(), 'isActive!=false']
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter()]
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
 
     municipio = request.args.get('municipio')
     if municipio:
@@ -502,7 +505,11 @@ def list_parcelas_by_farm(farm_id):
     """Query AgriParcel by hasAgriFarm relationship + isActive."""
     tenant = get_current_tenant()
     farm_uri = _entity_uri('AgriFarm', tenant, farm_id)
-    q = f'{_tenant_filter()};hasAgriFarm=="{farm_uri}";isActive!=false'
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter(), f'hasAgriFarm=="{farm_uri}"']
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
+    q = ';'.join(q_parts)
     status, data = query_entities('AgriParcel', tenant, {'q': q})
     if status != 200:
         return jsonify({'error': data}), status
@@ -631,7 +638,11 @@ def list_declaraciones_by_parcela(parcel_id):
     """Query AgriCropDeclaration by hasAgriParcel relationship."""
     tenant = get_current_tenant()
     parcel_uri = _entity_uri('AgriParcel', tenant, parcel_id)
-    q = f'{_tenant_filter()};hasAgriParcel=="{parcel_uri}";isActive!=false'
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter(), f'hasAgriParcel=="{parcel_uri}"']
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
+    q = ';'.join(q_parts)
     status, data = query_entities('AgriCropDeclaration', tenant, {'q': q})
     if status != 200:
         return jsonify({'error': data}), status
@@ -814,7 +825,11 @@ def list_recintos_by_declaracion(decl_id):
     """
     tenant = get_current_tenant()
     decl_uri = _entity_uri('AgriCropDeclaration', tenant, decl_id)
-    q = f'{_tenant_filter()};hasAgriCropDeclaration=="{decl_uri}";isActive!=false'
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter(), f'hasAgriCropDeclaration=="{decl_uri}"']
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
+    q = ';'.join(q_parts)
     status, data = query_entities('SigpacEnclosure', tenant, {'q': q})
     if status != 200:
         return jsonify({'error': data}), status
@@ -1089,7 +1104,10 @@ def list_tratamientos():
     """List AgriPestTreatment entities for current tenant with optional filters."""
     tenant = get_current_tenant()
     parcela_id = request.args.get('parcela_id')
-    q_parts = [_tenant_filter(), 'isActive!=false']
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter()]
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
     if parcela_id:
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
@@ -1229,7 +1247,10 @@ def list_fertilizaciones():
     """List AgriFertilizerApplication entities for current tenant."""
     tenant = get_current_tenant()
     parcela_id = request.args.get('parcela_id')
-    q_parts = [_tenant_filter(), 'isActive!=false']
+    incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
+    q_parts = [_tenant_filter()]
+    if not incluir_inactivos:
+        q_parts.append('isActive!=false')
     if parcela_id:
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')

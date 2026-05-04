@@ -12,6 +12,8 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchParcela, setSearchParcela] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -19,6 +21,7 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
     try {
       const filters: Record<string, string> = {};
       if (searchParcela.trim()) filters.parcela_id = searchParcela.trim();
+      if (showDeleted) filters.incluir_inactivos = 'true';
       const data = await tratamientosApi.list(filters);
       setItems(Array.isArray(data) ? data : data?.data || []);
     } catch (err: any) {
@@ -26,7 +29,14 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
     } finally {
       setLoading(false);
     }
-  }, [searchParcela]);
+  }, [searchParcela, showDeleted, refreshKey]);
+
+  const handleRestore = (item: any) => {
+    const id = item.id || item.orion_entity_id;
+    tratamientosApi.restore(id)
+      .then(() => setRefreshKey(k => k + 1))
+      .catch((err: any) => alert('Error: ' + (err.error || 'No se pudo restaurar')));
+  };
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -57,7 +67,11 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
       },
         React.createElement(Plus, { className: 'h-4 w-4' }),
         React.createElement('span', null, 'Nuevo')
-      )
+      ),
+      React.createElement('button', {
+        onClick: () => setShowDeleted(!showDeleted),
+        className: `px-3 py-1 text-xs rounded h-[38px] ${showDeleted ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-gray-100 text-gray-600 border border-gray-200'}`,
+      }, showDeleted ? 'Papelera' : 'Ver papelera')
     ),
 
     // Content
@@ -75,19 +89,25 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
               React.createElement('p', { className: 'text-sm' }, 'No hay tratamientos registrados')
             )
           : React.createElement('div', { className: 'space-y-2 max-h-[500px] overflow-y-auto' },
-              items.map((item: any) =>
-                React.createElement('div', {
+              items.map((item: any) => {
+                const isInactive = item.isActive === false || item.is_active === false;
+                return React.createElement('div', {
                   key: item.id || item.entityId,
-                  className: 'bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100',
+                  className: `${isInactive ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'} rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow border`,
                   onClick: () => onSelect(item),
                 },
                   React.createElement('div', { className: 'flex justify-between items-start' },
                     React.createElement('h3', { className: 'font-semibold text-gray-900' },
                       item.producto_ropo || 'Tratamiento'
                     ),
-                    item.fecha
-                      ? React.createElement('span', { className: 'text-xs text-gray-500' }, formatDate(item.fecha))
-                      : null
+                    React.createElement('div', { className: 'flex items-center gap-2' },
+                      isInactive
+                        ? React.createElement('span', { className: 'text-xs text-red-500 font-medium bg-red-100 px-2 py-0.5 rounded' }, 'Inactivo')
+                        : null,
+                      item.fecha
+                        ? React.createElement('span', { className: 'text-xs text-gray-500' }, formatDate(item.fecha))
+                        : null
+                    )
                   ),
                   React.createElement('div', { className: 'text-sm text-gray-500 mt-1' },
                     [item.parcela_id ? `Parcela: ${item.parcela_id}` : null, item.plaga ? `Plaga: ${item.plaga}` : null].filter(Boolean).join(' | ')
@@ -96,9 +116,15 @@ export const TratamientoList: React.FC<TratamientoListProps> = ({ onSelect, onNe
                     ? React.createElement('div', { className: 'text-xs text-gray-400 mt-1' },
                         'Dosis: ', item.dosis, item.unidad_dosis ? ` ${item.unidad_dosis}` : ''
                       )
+                    : null,
+                  isInactive
+                    ? React.createElement('button', {
+                        onClick: (e: React.MouseEvent) => { e.stopPropagation(); handleRestore(item); },
+                        className: 'text-xs text-green-600 hover:text-green-800 underline mt-2',
+                      }, 'Restaurar')
                     : null
-                )
-              )
+                );
+              })
             )
   );
 };
