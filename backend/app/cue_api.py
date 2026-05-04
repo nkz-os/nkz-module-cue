@@ -1996,6 +1996,9 @@ def purge_firma_cert():
     }), 200
 
 
+from .gestor_routes import gestor_bp
+app.register_blueprint(gestor_bp)
+
 app.register_blueprint(cue_bp)
 
 

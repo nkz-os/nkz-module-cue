@@ -36,6 +36,16 @@
     "storage_access": false,
     "external_requests": []
   },
+  "backend": {
+    "routes": [
+      "/gestor/tenants",
+      "/gestor/submissions",
+      "/gestor/mis-autorizaciones",
+      "/gestor/solicitar",
+      "/gestor/autorizar/:id",
+      "/gestor/switch-tenant"
+    ]
+  },
   "build_config": {
     "type": "iife",
     "remote_entry_url": "/modules/cue/nkz-module.js"
