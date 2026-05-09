@@ -6,6 +6,7 @@
 # All writes go through Orion-LD (SOTA architecture).
 
 import os
+import re
 import logging
 import requests
 from typing import Optional, Dict, Any, List
@@ -51,12 +52,30 @@ def _build_context(entity_type: str) -> list:
 
 
 def _ngsi_ld_headers(tenant_id: str, with_content_type: bool = True) -> Dict[str, str]:
-    """Build NGSI-LD request headers."""
-    h = {
-        'NGSILD-Tenant': tenant_id,
+    """Build canonical NGSI-LD headers with tenant normalization.
+
+    Applies FIWARE multi-tenant conventions: lowercase, underscores,
+    alphanumeric-only normalized tenant value for both NGSILD-Tenant
+    and Fiware-Service headers. Includes Link header when CONTEXT_URL is set.
+    """
+    n = tenant_id.lower().strip().replace('-', '_').replace(' ', '_')
+    n = re.sub(r'[^a-z0-9_]', '', n)
+    n = n.strip('_') or tenant_id
+    h: Dict[str, str] = {
+        'NGSILD-Tenant': n,
+        'Fiware-Service': n,
+        'Fiware-ServicePath': '/',
+        'Accept': 'application/ld+json',
     }
     if with_content_type:
         h['Content-Type'] = 'application/ld+json'
+    ctx = os.getenv('CONTEXT_URL', '')
+    if ctx:
+        h['Link'] = (
+            f'<{ctx}>; '
+            f'rel="http://www.w3.org/ns/json-ld#context"; '
+            f'type="application/ld+json"'
+        )
     return h
 
 
