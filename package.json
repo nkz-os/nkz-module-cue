@@ -1,7 +1,7 @@
 {
   "name": "nkz-module-cue",
   "version": "0.2.0",
-  "description": "CUE — Cuaderno de Campo de Explotación, SIEX compliant (RD 1054/2022)",
+  "description": "CUE \u2014 Cuaderno de Campo de Explotaci\u00f3n, SIEX compliant (RD 1054/2022)",
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
@@ -30,6 +30,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.2.2",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "@nekazari/module-kit": "^0.1.0"
   }
 }
