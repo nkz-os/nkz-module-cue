@@ -29,7 +29,7 @@ INSERT INTO marketplace_modules (
     'cue',
     'Cuaderno de Campo (CUE)',
     'Cuaderno de Explotación Único conforme al RD 1054/2022 (SIEX). Registro de explotaciones, tratamientos fitosanitarios, fertilizaciones y recintos SIGPAC con validación legal.',
-    'https://nekazari.robotika.cloud/modules/cue/nkz-module.js',
+    'https://YOUR_DOMAIN/modules/cue/nkz-module.js',
     'cue_module',
     './App',
     '0.2.0',
