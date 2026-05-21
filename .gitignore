@@ -34,3 +34,13 @@ IMPLEMENTATION_PLAN.md
 
 # Internal docs (workspace-level, not module)
 internal-docs/
+docs/superpowers/
+docs/internal/
+docs/plans/
+docs/specs/
+docs/audits/
+*_PLAN.md
+*_SPEC.md
+*HANDOVER*.md
+HANDOFF.md
+CURRENT_STATE.md
