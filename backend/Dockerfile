@@ -17,4 +17,4 @@ USER cue
 
 EXPOSE 5000
 
-CMD ["python", "-m", "app.cue_api"]
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app.cue_api:app"]
