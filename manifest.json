@@ -4,6 +4,14 @@
   "display_name": "CUE — Cuaderno de Campo",
   "version": "0.2.0",
   "description": "SIEX-compliant Cuaderno de Explotacion Unico para Espana (RD 1054/2022)",
+  "description_i18n": {
+    "es": "Cuaderno de Explotación Único conforme al SIEX para España (RD 1054/2022)",
+    "en": "SIEX-compliant Unified Farm Logbook for Spain (Royal Decree 1054/2022)",
+    "eu": "SIEX-rekin bat datorren Ustiategi Koaderno Bakarra Espainiarako (1054/2022 Errege Dekretua)",
+    "fr": "Carnet d'Exploitation Unique conforme au SIEX pour l'Espagne (Décret Royal 1054/2022)",
+    "pt": "Caderno de Exploração Único compatível com SIEX para Espanha (Decreto Real 1054/2022)",
+    "ca": "Quadern d'Explotació Únic conforme al SIEX per a Espanya (RD 1054/2022)"
+  },
   "short_description": "SIEX-compliant field notebook for Spanish agriculture",
   "author": {
     "name": "Nekazari Team",
