@@ -27,8 +27,38 @@ MTLS_KEY_PATH = os.getenv('MTLS_KEY_PATH', '/etc/cue/certs/client.key')
 MTLS_CA_PATH = os.getenv('MTLS_CA_PATH', '/etc/cue/certs/ca.crt')
 
 # For ephemeral cert flow (AutoFirma): cert loaded from request, not env
+# PEM strings are written to temp files because requests library requires
+# file paths, not inline PEM content.
 _ephemeral_cert = None
 _ephemeral_key = None
+_ephemeral_cert_file = None  # Path to temp cert file (AutoFirma flow)
+_ephemeral_key_file = None   # Path to temp key file (AutoFirma flow)
+
+
+def _write_ephemeral_to_tempfiles():
+    """Write ephemeral cert/key PEM strings to temporary files.
+
+    The requests library requires cert/key as FILE PATHS, not PEM strings.
+    We write to temp files (tmpfs in K8s, never persists to disk).
+    Files are created with 0o600 permissions for security.
+    """
+    global _ephemeral_cert_file, _ephemeral_key_file
+    if _ephemeral_cert and _ephemeral_key and not _ephemeral_cert_file:
+        # Write cert to temp file
+        cert_fd, _ephemeral_cert_file = tempfile.mkstemp(
+            suffix='.pem', prefix='cue_cert_'
+        )
+        with os.fdopen(cert_fd, 'w') as f:
+            f.write(_ephemeral_cert)
+        os.chmod(_ephemeral_cert_file, 0o600)
+
+        # Write key to temp file
+        key_fd, _ephemeral_key_file = tempfile.mkstemp(
+            suffix='.pem', prefix='cue_key_'
+        )
+        with os.fdopen(key_fd, 'w') as f:
+            f.write(_ephemeral_key)
+        os.chmod(_ephemeral_key_file, 0o600)
 
 
 def _get_mtls_kwargs() -> dict:
@@ -36,13 +66,17 @@ def _get_mtls_kwargs() -> dict:
     Build mTLS kwargs for requests library.
 
     Priority:
-    1. Ephemeral cert (AutoFirma flow -- loaded from user request into RAM)
+    1. Ephemeral cert (AutoFirma flow -- loaded from user request into RAM,
+       written to temp files for requests library compatibility)
     2. Persistent cert from K8s Secrets (Sello de Empresa flow)
     """
-    global _ephemeral_cert, _ephemeral_key
+    global _ephemeral_cert, _ephemeral_key, _ephemeral_cert_file, _ephemeral_key_file
 
     if _ephemeral_cert and _ephemeral_key:
-        return {'cert': (_ephemeral_cert, _ephemeral_key)}
+        # Write PEM strings to temp files (requests requires file paths)
+        _write_ephemeral_to_tempfiles()
+        if _ephemeral_cert_file and _ephemeral_key_file:
+            return {'cert': (_ephemeral_cert_file, _ephemeral_key_file)}
 
     if os.path.exists(MTLS_CERT_PATH) and os.path.exists(MTLS_KEY_PATH):
         ca = MTLS_CA_PATH if os.path.exists(MTLS_CA_PATH) else None
@@ -69,11 +103,24 @@ def set_ephemeral_cert(cert_pem: str, key_pem: str):
 
 
 def purge_ephemeral_cert():
-    """Purge ephemeral certificate from RAM after IUWS response."""
-    global _ephemeral_cert, _ephemeral_key
+    """Purge ephemeral certificate from RAM and delete temp files after IUWS response."""
+    global _ephemeral_cert, _ephemeral_key, _ephemeral_cert_file, _ephemeral_key_file
     _ephemeral_cert = None
     _ephemeral_key = None
-    logger.info("Ephemeral certificate purged from RAM")
+
+    # Delete temp files if they exist
+    for fpath in (_ephemeral_cert_file, _ephemeral_key_file):
+        if fpath and os.path.exists(fpath):
+            try:
+                os.unlink(fpath)
+            except OSError as e:
+                logger.warning(
+                    "Failed to delete temp cert file %s: %s", fpath, e
+                )
+
+    _ephemeral_cert_file = None
+    _ephemeral_key_file = None
+    logger.info("Ephemeral certificate purged from RAM and temp files deleted")
 
 
 def resolve_iuws_url(codigo_provincia: str) -> Optional[str]:
