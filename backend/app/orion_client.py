@@ -34,10 +34,37 @@ SDM_CONTEXTS = {
     'AgriFertilizerApplication': "https://smart-data-models.github.io/dataModel.Agrifood/AgriFertilizerApplication/context.jsonld",
 }
 
+# Allowed characters in entity IDs: alphanumeric, hyphens, underscores.
+# Restricts to safe chars to prevent NGSI-LD query injection via the 'q' parameter.
+_SAFE_ENTITY_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
+
+# Safe entity type: alphabetic only (SDM convention)
+_SAFE_ENTITY_TYPE_RE = re.compile(r'[^a-zA-Z]')
+
+# Safe tenant ID: alphanumeric, hyphens, underscores, dots (FIWARE convention)
+_SAFE_TENANT_RE = re.compile(r'[^a-zA-Z0-9_\-.]')
+
 
 def _entity_uri(entity_type: str, tenant_id: str, entity_id: str) -> str:
-    """Build NGSI-LD entity URN."""
-    return f"urn:ngsi-ld:{entity_type}:{tenant_id}:{entity_id}"
+    """Build NGSI-LD entity URN with input validation.
+
+    Entity IDs are validated to contain only safe characters
+    (alphanumeric, hyphens, underscores) to prevent NGSI-LD query injection
+    via the 'q' parameter. Tenant and type are sanitized.
+
+    Raises ValueError if entity_id contains unsafe characters or is empty.
+    """
+    if not entity_id:
+        raise ValueError("entity_id must not be empty")
+    if not _SAFE_ENTITY_ID_RE.match(entity_id):
+        raise ValueError(
+            f"entity_id contains invalid characters: {entity_id!r}. "
+            f"Only alphanumeric, hyphens, and underscores are allowed."
+        )
+    # Sanitize tenant_id and entity_type (defense in depth)
+    safe_tenant = _SAFE_TENANT_RE.sub('_', tenant_id)
+    safe_type = _SAFE_ENTITY_TYPE_RE.sub('', entity_type)
+    return f"urn:ngsi-ld:{safe_type}:{safe_tenant}:{entity_id}"
 
 
 def _build_context(entity_type: str) -> list:
