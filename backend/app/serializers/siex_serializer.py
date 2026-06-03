@@ -19,6 +19,7 @@ import os
 import logging
 from datetime import date
 from typing import Optional, Dict, Any, List, Tuple
+from xml.sax.saxutils import escape as xml_escape
 import xmlschema
 
 logger = logging.getLogger(__name__)
@@ -102,8 +103,13 @@ def _get_ngsi_value(attr: Any) -> Any:
 
 
 def _text(element_name: str, value: Any) -> str:
-    """Build an XML text element: <Name>value</Name>."""
-    return f'<{element_name}>{value}</{element_name}>'
+    """Build an XML text element: <Name>escaped_value</Name>.
+
+    All text values are XML-escaped to prevent injection attacks.
+    Characters <, >, &, ", ' are converted to their entity references.
+    Element names are NOT escaped (they are controlled by code, not user input).
+    """
+    return f'<{element_name}>{xml_escape(str(value))}</{element_name}>'
 
 
 def _element(element_name: str, children: List[str]) -> str:
