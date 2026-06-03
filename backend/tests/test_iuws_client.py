@@ -79,7 +79,6 @@ class TestEphemeralCert:
         try:
             monkeypatch.setenv('MTLS_CERT_PATH', cert_path)
             monkeypatch.setenv('MTLS_KEY_PATH', key_path)
-            # Reload module globals
             import app.integration.iuws_client as mod
             mod.MTLS_CERT_PATH = cert_path
             mod.MTLS_KEY_PATH = key_path
@@ -89,3 +88,62 @@ class TestEphemeralCert:
         finally:
             os.unlink(cert_path)
             os.unlink(key_path)
+
+
+class TestEphemeralCertIsolation:
+    """Thread safety: concurrent requests must not share certificates."""
+
+    def test_certs_isolated_between_threads(self):
+        """Two concurrent threads must NOT see each other's certificates."""
+        import app.integration.iuws_client as mod
+
+        # Purge any existing state
+        mod.purge_ephemeral_cert()
+
+        results = {}
+        errors = []
+        barrier = threading.Barrier(2, timeout=5)
+
+        def user_a():
+            try:
+                mod.set_ephemeral_cert("CERT_A_CONTENT", "KEY_A_CONTENT")
+                barrier.wait()  # Both threads have set their certs
+                time.sleep(0.1)  # Let both reach _get_mtls_kwargs
+                kwargs = mod._get_mtls_kwargs()
+                # Extract cert content from temp file
+                cert_path = kwargs['cert'][0]
+                with open(cert_path) as f:
+                    results['user_a_cert'] = f.read()
+                mod.purge_ephemeral_cert()
+            except Exception as e:
+                errors.append(f"user_a: {e}")
+
+        def user_b():
+            try:
+                mod.set_ephemeral_cert("CERT_B_CONTENT", "KEY_B_CONTENT")
+                barrier.wait()
+                time.sleep(0.1)
+                kwargs = mod._get_mtls_kwargs()
+                key_path = kwargs['cert'][1]
+                with open(key_path) as f:
+                    results['user_b_key'] = f.read()
+                mod.purge_ephemeral_cert()
+            except Exception as e:
+                errors.append(f"user_b: {e}")
+
+        t_a = threading.Thread(target=user_a)
+        t_b = threading.Thread(target=user_b)
+        t_a.start()
+        t_b.start()
+        t_a.join()
+        t_b.join()
+
+        if errors:
+            pytest.fail(f"Thread errors: {errors}")
+
+        assert results.get('user_a_cert') == "CERT_A_CONTENT", (
+            f"User A got wrong cert: {results.get('user_a_cert')}"
+        )
+        assert results.get('user_b_key') == "KEY_B_CONTENT", (
+            f"User B got wrong key: {results.get('user_b_key')}"
+        )
