@@ -18,7 +18,7 @@ export const FirmaWidget: React.FC<FirmaWidgetProps> = ({
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: any) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target?.files?.[0];
     setError(null);
 
@@ -60,7 +60,7 @@ export const FirmaWidget: React.FC<FirmaWidgetProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handlePasswordChange = (e: any) => {
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pwd = e.target.value;
     setPassword(pwd);
     // Also trigger reload if file already selected

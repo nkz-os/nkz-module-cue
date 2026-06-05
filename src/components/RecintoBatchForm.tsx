@@ -99,7 +99,7 @@ export const RecintoBatchForm: React.FC<RecintoBatchFormProps> = ({ declaracionI
                 React.createElement('input', {
                   type: 'text',
                   value: r.referencia_sigpac,
-                  onChange: (e: any) => updateRow(i, 'referencia_sigpac', e.target.value),
+                  onChange: (e) => updateRow(i, 'referencia_sigpac', e.target.value),
                   placeholder: '31:230:0:0:0:243:9003',
                   className: 'border rounded px-1 py-0.5 w-full text-xs',
                 })
@@ -109,7 +109,7 @@ export const RecintoBatchForm: React.FC<RecintoBatchFormProps> = ({ declaracionI
                   type: 'number',
                   step: '0.01',
                   value: r.superficie_admisible_ha,
-                  onChange: (e: any) => updateRow(i, 'superficie_admisible_ha', e.target.value),
+                  onChange: (e) => updateRow(i, 'superficie_admisible_ha', e.target.value),
                   className: 'border rounded px-1 py-0.5 w-20 text-xs',
                 })
               ),
@@ -117,7 +117,7 @@ export const RecintoBatchForm: React.FC<RecintoBatchFormProps> = ({ declaracionI
                 React.createElement('input', {
                   type: 'text',
                   value: r.geometria,
-                  onChange: (e: any) => updateRow(i, 'geometria', e.target.value),
+                  onChange: (e) => updateRow(i, 'geometria', e.target.value),
                   placeholder: '{"type":"Polygon",...}',
                   className: 'border rounded px-1 py-0.5 w-full text-xs font-mono',
                 })

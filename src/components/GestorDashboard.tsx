@@ -73,7 +73,7 @@ export const GestorDashboard: React.FC<GestorDashboardProps> = ({ onSelectSubmis
     React.createElement('div', { className: 'flex gap-2' },
       React.createElement('select', {
         value: estadoFilter,
-        onChange: (e: any) => setEstadoFilter(e.target.value),
+        onChange: (e) => setEstadoFilter(e.target.value),
         className: 'border border-gray-300 rounded px-2 py-1 text-xs'
       },
         React.createElement('option', { value: '' }, 'Todos los estados'),

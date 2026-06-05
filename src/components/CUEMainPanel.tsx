@@ -497,8 +497,8 @@ export const CUEMainPanel: React.FC = () => {
               React.createElement('input', {
                 type: 'email',
                 value: gestorEmail,
-                onChange: function (e: any) { setGestorEmail(e.target.value); setAuthError(null); },
-                onKeyDown: function (e: any) { if (e.key === 'Enter') { e.preventDefault(); } },
+                onChange: function (e) { setGestorEmail(e.target.value); setAuthError(null); },
+                onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); } },
                 placeholder: 'email@gestoria.com',
                 className: 'border border-blue-300 rounded px-3 py-2 flex-1 text-sm'
               }),
@@ -598,8 +598,8 @@ export const CUEMainPanel: React.FC = () => {
           React.createElement('input', {
             type: 'email',
             value: solicitarEmail,
-            onChange: function (e: any) { setSolicitarEmail(e.target.value); setSolicitudResult(null); },
-            onKeyDown: function (e: any) { if (e.key === 'Enter') { e.preventDefault(); } },
+            onChange: function (e) { setSolicitarEmail(e.target.value); setSolicitudResult(null); },
+            onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); } },
             placeholder: 'email@agricultor.com',
             className: 'border border-gray-300 rounded px-3 py-2 flex-1 text-sm'
           }),
