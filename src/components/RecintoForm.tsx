@@ -44,7 +44,7 @@ export const RecintoForm: React.FC<RecintoFormProps> = ({ declaracionId, onSaved
     }
   };
 
-  const handleSubmit = function (e: any) {
+  const handleSubmit = function (e: React.FormEvent) {
     if (e && e.preventDefault) e.preventDefault();
     setLoading(true);
     setError(null);

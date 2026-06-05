@@ -18,7 +18,7 @@ export const GestorFarmSelector: React.FC<GestorFarmSelectorProps> = ({ onSelect
       .catch(err => { setError(err.message); setLoading(false); });
   }, []);
 
-  const handleSelect = (e: any) => {
+  const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const idx = e.target.selectedIndex;
     const tenantId = e.target.value;
     const farmerName = idx > 0 && tenants[idx - 1] ? (tenants[idx - 1].farmer_name || tenants[idx - 1].farmer_tenant) : tenantId;
