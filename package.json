@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "CUE — Cuaderno de Campo de Explotación, SIEX compliant (RD 1054/2022)",
   "license": "AGPL-3.0",
+  "packageManager": "pnpm@9.0.0",
   "type": "module",
   "main": "./src/Module.tsx",
   "nkz": {
