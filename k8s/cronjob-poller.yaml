@@ -29,7 +29,7 @@ spec:
           containers:
             - name: poller
               image: ghcr.io/nkz-os/nkz-module-cue/cue-backend:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python3", "-m", "app.integration.iuws_poller"]
               env:
                 - name: APP_NAME
