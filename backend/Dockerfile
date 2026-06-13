@@ -17,4 +17,5 @@ USER cue
 
 EXPOSE 5000
 
+# rebuilt by CI trigger
 CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app.cue_api:app"]
