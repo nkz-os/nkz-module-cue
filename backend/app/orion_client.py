@@ -10,6 +10,7 @@ import re
 import logging
 import requests
 from typing import Optional, Dict, Any, List
+from app.common.tenant_utils import normalize_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +86,7 @@ def _ngsi_ld_headers(tenant_id: str, with_content_type: bool = True) -> Dict[str
     alphanumeric-only normalized tenant value for both NGSILD-Tenant
     and Fiware-Service headers. Includes Link header when CONTEXT_URL is set.
     """
-    n = tenant_id.lower().strip().replace('-', '_').replace(' ', '_')
-    n = re.sub(r'[^a-z0-9_]', '', n)
-    n = n.strip('_') or tenant_id
+    n = normalize_tenant_id(tenant_id)
     h: Dict[str, str] = {
         'NGSILD-Tenant': n,
         'Fiware-Service': n,
