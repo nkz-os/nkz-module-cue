@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/nkz-os/nkz-module-cue/cue-backend@sha256:eeaabba2c3a2f212e0f9209d613ccb3b29c071b442fa3e6d41529a99bfe62fb2
+          image: ghcr.io/nkz-os/nkz-module-cue/cue-backend@sha256:541f17c541c1d3e8f59072ae31234e1da543cea1b751c200b793f6a55b59e7c5
           imagePullPolicy: Always
           ports:
             - name: http
