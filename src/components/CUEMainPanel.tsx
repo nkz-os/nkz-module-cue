@@ -102,10 +102,21 @@ export const CUEMainPanel: React.FC = () => {
     }
   };
 
+  const dispatchRecintosUpdated = useCallback(function (list: any[], selected: string | null = null) {
+    window.dispatchEvent(new CustomEvent('cue:recintos-updated', {
+      detail: { enclosures: list, selectedId: selected },
+    }));
+  }, []);
+
+  const dispatchRecintosCleared = useCallback(function () {
+    window.dispatchEvent(new CustomEvent('cue:recintos-cleared'));
+  }, []);
+
   // Fetch recintos when declarationId changes
   const fetchRecintos = useCallback(function () {
     if (!declarationId.trim()) {
       setRecintoList([]);
+      dispatchRecintosCleared();
       return;
     }
     setRecintoListLoading(true);
@@ -114,13 +125,15 @@ export const CUEMainPanel: React.FC = () => {
       .then(function (data: any) {
         var list = Array.isArray(data) ? data : (data?.data || []);
         setRecintoList(list);
+        dispatchRecintosUpdated(list);
         setRecintoListLoading(false);
       })
       .catch(function (err: any) {
         setRecintoListError(err?.error || err?.message || 'Error al cargar recintos');
+        dispatchRecintosCleared();
         setRecintoListLoading(false);
       });
-  }, [declarationId]);
+  }, [declarationId, dispatchRecintosCleared, dispatchRecintosUpdated]);
 
   useEffect(function () {
     if (activeTab === 'recintos' && declarationId.trim()) {
@@ -165,6 +178,10 @@ export const CUEMainPanel: React.FC = () => {
   };
 
   const handleRecintoSelect = function (recinto: any) {
+    const id = recinto.id || recinto.orion_entity_id || null;
+    window.dispatchEvent(new CustomEvent('cue:recinto-selected', {
+      detail: { selectedId: id },
+    }));
     setSelectedRecinto(recinto);
     setRecintoMode('edit');
   };
@@ -249,7 +266,11 @@ export const CUEMainPanel: React.FC = () => {
             type: 'text',
             value: declarationId,
             onChange: function (e: React.ChangeEvent<HTMLInputElement>) {
-              setDeclarationId(e.target.value);
+              const nextId = e.target.value;
+              setDeclarationId(nextId);
+              if (!nextId.trim()) {
+                dispatchRecintosCleared();
+              }
             },
             placeholder: 'UUID de la declaración...',
             className: 'border border-gray-300 rounded px-3 py-2 w-full text-sm flex-1',
