@@ -1402,7 +1402,8 @@ def list_productos_ropo():
             params.extend([f'%{query}%', f'%{query}%', f'%{query}%'])
 
         if cultivo:
-            sql += " AND %s = ANY(cultivos_autorizados)"
+            sql += (" AND EXISTS (SELECT 1 FROM unnest(cultivos_autorizados) c "
+                    "WHERE lower(unaccent(c)) = lower(unaccent(%s)))")
             params.append(cultivo)
 
         sql += " ORDER BY nombre_comercial LIMIT 200"
