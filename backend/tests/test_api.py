@@ -83,3 +83,23 @@ class TestAuthRequired:
     def test_create_explotacion_requires_auth(self, client):
         r = client.post('/api/modules/cue/explotaciones', json={'nombre': 'Finca'})
         assert r.status_code == 401
+
+
+from unittest.mock import MagicMock, patch
+
+
+class TestInternalAuth:
+    def test_internal_secret_bypasses_jwt(self, client, monkeypatch):
+        monkeypatch.setenv("INTERNAL_SERVICE_SECRET", "s3cr3t")
+        fake_conn = MagicMock()
+        fake_conn.cursor.return_value.fetchall.return_value = []
+        with patch("app.cue_api.get_pg_conn", return_value=fake_conn):
+            r = client.get(
+                "/api/modules/cue/productos-ropo?cultivo=trigo",
+                headers={"X-Internal-Service-Secret": "s3cr3t", "X-Tenant-ID": "montiko"},
+            )
+        assert r.status_code == 200
+
+    def test_no_secret_no_token_is_401(self, client):
+        r = client.get("/api/modules/cue/productos-ropo?cultivo=trigo", headers={"X-Tenant-ID": "montiko"})
+        assert r.status_code == 401
