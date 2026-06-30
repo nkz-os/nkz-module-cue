@@ -104,6 +104,15 @@ class TestInternalAuth:
         r = client.get("/api/modules/cue/productos-ropo?cultivo=trigo", headers={"X-Tenant-ID": "montiko"})
         assert r.status_code == 401
 
+    def test_internal_secret_does_not_bypass_post(self, client, monkeypatch):
+        monkeypatch.setenv("INTERNAL_SERVICE_SECRET", "s3cr3t")
+        r = client.post(
+            "/api/modules/cue/explotaciones",
+            json={},
+            headers={"X-Internal-Service-Secret": "s3cr3t", "X-Tenant-ID": "montiko"},
+        )
+        assert r.status_code == 401
+
 
 class TestCultivoMatch:
     def test_cultivo_filter_is_accent_case_insensitive(self, client, monkeypatch):

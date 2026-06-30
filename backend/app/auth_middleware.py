@@ -68,7 +68,12 @@ def require_auth(f):
     def decorated_function(*args, **kwargs):
         internal_secret = os.getenv("INTERNAL_SERVICE_SECRET", "")
         provided = request.headers.get("X-Internal-Service-Secret", "")
-        if internal_secret and provided and hmac.compare_digest(provided, internal_secret):
+        if (
+            request.method == "GET"
+            and internal_secret
+            and provided
+            and hmac.compare_digest(provided, internal_secret)
+        ):
             g.current_user = {}
             g.tenant = request.headers.get("X-Tenant-ID", "")
             g.tenant_id = g.tenant
