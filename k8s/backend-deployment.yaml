@@ -45,6 +45,11 @@ spec:
               value: "account"
             - name: KEYCLOAK_INTERNAL_URL
               value: "http://keycloak-service:8080/auth"
+            - name: INTERNAL_SERVICE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-secret
+                  key: INTERNAL_SERVICE_SECRET
             - name: KEYCLOAK_ADMIN_USER
               valueFrom:
                 secretKeyRef:

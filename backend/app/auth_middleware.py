@@ -7,6 +7,7 @@
 # Integrated gestor cross-tenant support — transparent to all routes.
 
 import os
+import hmac
 import logging
 from functools import wraps
 from flask import request, jsonify, g
@@ -65,6 +66,22 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        internal_secret = os.getenv("INTERNAL_SERVICE_SECRET", "")
+        provided = request.headers.get("X-Internal-Service-Secret", "")
+        if (
+            request.method == "GET"
+            and internal_secret
+            and provided
+            and hmac.compare_digest(provided, internal_secret)
+        ):
+            g.current_user = {}
+            g.tenant = request.headers.get("X-Tenant-ID", "")
+            g.tenant_id = g.tenant
+            g.user_id = "internal-service"
+            g.username = "internal-service"
+            g.email = ""
+            g.roles = []
+            return f(*args, **kwargs)
         token = get_request_token()
         if not token:
             return jsonify({'error': 'Falta cabecera de autorización o es inválida'}), 401
