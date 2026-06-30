@@ -113,6 +113,17 @@ class TestInternalAuth:
         )
         assert r.status_code == 401
 
+    def test_internal_secret_bypasses_siex_write(self, client, monkeypatch):
+        monkeypatch.setenv("INTERNAL_SERVICE_SECRET", "s3cr3t")
+        with patch("app.cue_api.create_entity", return_value=(201, {"id": "x"})):
+            r = client.post(
+                "/api/modules/cue/tratamientos",
+                json={"validar": False, "nombre": "t"},
+                headers={"X-Internal-Service-Secret": "s3cr3t", "X-Tenant-ID": "montiko"},
+            )
+        assert r.status_code != 401
+        assert r.status_code in (200, 201)
+
 
 class TestCultivoMatch:
     def test_cultivo_filter_is_accent_case_insensitive(self, client, monkeypatch):
