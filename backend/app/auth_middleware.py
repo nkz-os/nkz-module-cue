@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 TRUST_API_GATEWAY = os.getenv('TRUST_API_GATEWAY', 'true').lower() == 'true'
 GESTOR_ROLE = 'GestorCUE'
+
+# Internal-service-secret may bypass JWT for read-only reference GETs, plus an
+# explicit allowlist of internal write endpoints (SIEX registration from
+# field-operations). It MUST NOT cover arbitrary mutations.
+_INTERNAL_WRITE_PATHS = frozenset({
+    '/api/modules/cue/tratamientos',
+    '/api/modules/cue/fertilizaciones',
+})
 POSTGRES_URL = os.getenv(
     'POSTGRES_URL',
     'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
@@ -68,8 +76,11 @@ def require_auth(f):
     def decorated_function(*args, **kwargs):
         internal_secret = os.getenv("INTERNAL_SERVICE_SECRET", "")
         provided = request.headers.get("X-Internal-Service-Secret", "")
+        internal_method_ok = request.method == "GET" or (
+            request.method == "POST" and request.path in _INTERNAL_WRITE_PATHS
+        )
         if (
-            request.method == "GET"
+            internal_method_ok
             and internal_secret
             and provided
             and hmac.compare_digest(provided, internal_secret)
