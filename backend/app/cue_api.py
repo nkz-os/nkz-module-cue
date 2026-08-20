@@ -905,7 +905,7 @@ def create_recintos_batch():
             "sigpacReference": _property(recinto_data.get('referencia_sigpac', '')),
             "eligibleArea": _property({
                 "value": recinto_data.get('superficie_admisible_ha', 0),
-                "unitCode": "HA"
+                "unitCode": "HAR"
             }),
             "location": _geo_property(geo),
             "tenantId": _property(tenant),
@@ -1131,6 +1131,10 @@ def create_tratamiento():
         "productoROPORef": _property(data.get('producto_ropo', '')),
         "dosisAplicada": _property({
             "value": data.get('dosis', 0),
+            # ASSUMPTION: UN/CEFACT Rec 20 has no code for mass or volume per
+            # hectare. Kept as the written symbol; switching to kg/m2 (28) or
+            # l/m2 would require converting every stored value — confirm before
+            # continuing.
             "unitCode": data.get('unidad_dosis', 'L/ha')
         }),
         "plagaObjeto": _property(data.get('plaga', '')),
@@ -1206,6 +1210,10 @@ def update_tratamiento(tratamiento_id):
     if 'dosis' in data:
         attributes['dosisAplicada'] = _property({
             "value": data['dosis'],
+            # ASSUMPTION: UN/CEFACT Rec 20 has no code for mass or volume per
+            # hectare. Kept as the written symbol; switching to kg/m2 (28) or
+            # l/m2 would require converting every stored value — confirm before
+            # continuing.
             "unitCode": data.get('unidad_dosis', 'L/ha')
         })
 
@@ -1274,15 +1282,19 @@ def create_fertilizacion():
         "tipoFertilizante": _property(data.get('tipo', '')),
         "dosisFertilizante": _property({
             "value": data.get('dosis_kg_ha', 0),
+            # ASSUMPTION: UN/CEFACT Rec 20 has no code for mass or volume per
+            # hectare. Kept as the written symbol; switching to kg/m2 (28) or
+            # l/m2 would require converting every stored value — confirm before
+            # continuing.
             "unitCode": "kg/ha"
         }),
         "contenidoN": _property({
             "value": data.get('contenido_n_pct', 0),
-            "unitCode": "%"
+            "unitCode": "P1"
         }),
         "contenidoP": _property({
             "value": data.get('contenido_p_pct', 0),
-            "unitCode": "%"
+            "unitCode": "P1"
         }),
         "dateObserved": _property(data.get('fecha', '')),
         "tenantId": _property(tenant),
@@ -1327,17 +1339,21 @@ def update_fertilizacion(fertilizacion_id):
     if 'dosis_kg_ha' in data:
         attributes['dosisFertilizante'] = _property({
             "value": data['dosis_kg_ha'],
+            # ASSUMPTION: UN/CEFACT Rec 20 has no code for mass or volume per
+            # hectare. Kept as the written symbol; switching to kg/m2 (28) or
+            # l/m2 would require converting every stored value — confirm before
+            # continuing.
             "unitCode": "kg/ha"
         })
     if 'contenido_n_pct' in data:
         attributes['contenidoN'] = _property({
             "value": data['contenido_n_pct'],
-            "unitCode": "%"
+            "unitCode": "P1"
         })
     if 'contenido_p_pct' in data:
         attributes['contenidoP'] = _property({
             "value": data['contenido_p_pct'],
-            "unitCode": "%"
+            "unitCode": "P1"
         })
 
     status, result = update_entity('AgriFertilizerApplication', tenant, fertilizacion_id, attributes)
