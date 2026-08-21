@@ -72,16 +72,12 @@ class TestUnitCodes:
 
 
 def _payload_source() -> str:
-    """The entity-building half of cue_api, excluding the served @context document.
+    """cue_api source.
 
-    The @context document is a JSON-LD artefact with its own (separate) defects;
-    unitCode is not a term-definition keyword and is tracked apart from this test.
+    The module no longer serves its own @context document, so every unitCode left
+    in this file belongs to an entity payload.
     """
     from app import cue_api
 
-    path = cue_api.__file__
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.readlines()
-    start = next(i for i, line in enumerate(lines) if "def cue_context()" in line)
-    end = next(i for i, line in enumerate(lines[start:], start) if "def notify()" in line)
-    return "".join(lines[:start] + lines[end:])
+    with open(cue_api.__file__, encoding="utf-8") as fh:
+        return fh.read()
