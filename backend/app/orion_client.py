@@ -94,7 +94,10 @@ def _ngsi_ld_headers(tenant_id: str, with_content_type: bool = True) -> Dict[str
         'Accept': 'application/ld+json',
     }
     if with_content_type:
+        # Writes carry @context in the body, so the mode is ld+json and a Link
+        # header alongside it is the combination ETSI GS CIM 009 forbids.
         h['Content-Type'] = 'application/ld+json'
+        return h
     ctx = os.getenv('CONTEXT_URL', '')
     if ctx:
         h['Link'] = (
