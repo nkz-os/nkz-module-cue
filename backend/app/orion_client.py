@@ -15,25 +15,16 @@ from app.common.tenant_utils import normalize_tenant_id
 logger = logging.getLogger(__name__)
 
 ORION_URL = os.getenv('ORION_URL', 'http://orion-ld-service:1026')
+# The platform @context is the single vocabulary; CUE's terms live in it. The path is
+# the one the api-gateway actually serves — .jsonld is not routed and 404s.
 NGSI_LD_CONTEXT_URL = os.getenv(
     'CONTEXT_URL',
-    'http://api-gateway-service:5000/ngsi-ld-context.jsonld'
-)
-CUE_CONTEXT_URL = os.getenv(
-    'CUE_CONTEXT_URL',
-    'http://api-gateway-service:5000/ngsi-ld/cue-context.jsonld'
+    'http://api-gateway-service:5000/ngsi-ld-context.json'
 )
 
 DEFAULT_CONTEXTS = [
     "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
 ]
-
-SDM_CONTEXTS = {
-    'AgriFarm': "https://smart-data-models.github.io/dataModel.Agrifood/AgriFarm/context.jsonld",
-    'AgriParcel': "https://smart-data-models.github.io/dataModel.Agrifood/AgriParcel/context.jsonld",
-    'AgriPestTreatment': "https://smart-data-models.github.io/dataModel.Agrifood/AgriPestTreatment/context.jsonld",
-    'AgriFertilizerApplication': "https://smart-data-models.github.io/dataModel.Agrifood/AgriFertilizerApplication/context.jsonld",
-}
 
 # Allowed characters in entity IDs: alphanumeric, hyphens, underscores.
 # Restricts to safe chars to prevent NGSI-LD query injection via the 'q' parameter.
@@ -69,14 +60,13 @@ def _entity_uri(entity_type: str, tenant_id: str, entity_id: str) -> str:
 
 
 def _build_context(entity_type: str) -> list:
-    """Build @context array for an entity type."""
-    contexts = list(DEFAULT_CONTEXTS)
-    sdm_ctx = SDM_CONTEXTS.get(entity_type)
-    if sdm_ctx:
-        contexts.append(sdm_ctx)
-    else:
-        contexts.append(CUE_CONTEXT_URL)
-    return contexts
+    """Build the @context array for an entity type.
+
+    Every type resolves through the same platform context. The previous per-type
+    SDM URLs (smart-data-models.github.io/dataModel.X/<Type>/context.jsonld) do not
+    exist — that path shape 404s for every type, including AgriParcel and AgriFarm.
+    """
+    return [*DEFAULT_CONTEXTS, NGSI_LD_CONTEXT_URL]
 
 
 def _ngsi_ld_headers(tenant_id: str, with_content_type: bool = True) -> Dict[str, str]:

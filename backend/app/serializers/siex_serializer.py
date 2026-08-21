@@ -258,7 +258,7 @@ def build_enclosure_xml(enclosure: dict) -> str:
 
 
 def build_treatment_xml(treatment: dict) -> str:
-    """Build XML for an AgriPestTreatment entity.
+    """Build XML for an AgriPest entity.
 
     XSD sequence (TratamientoFitoType):
       FechaAplicacion, ProductoROPORef, [Dosis, UnidadDosis], Plaga,
@@ -343,7 +343,7 @@ def _extract_scalar_or_container(ngsi_field: Any) -> Any:
 
 
 def build_fertilization_xml(fertilization: dict) -> str:
-    """Build XML for an AgriFertilizerApplication entity.
+    """Build XML for an AgriFertilize entity.
 
     XSD sequence (FertilizacionType):
       FechaAplicacion, TipoFertilizante, DosisKGHA,
@@ -414,8 +414,8 @@ def serialize_explotacion_to_xml(
         farm: AgriFarm entity dict from NGSI-LD
         parcelas: List of AgriParcel entity dicts
         enclosures: List of SigpacEnclosure entity dicts
-        treatments: List of AgriPestTreatment entity dicts
-        fertilizations: List of AgriFertilizerApplication entity dicts
+        treatments: List of AgriPest entity dicts
+        fertilizations: List of AgriFertilize entity dicts
         payload_type: 'Alta', 'Modificacion', or 'Anulacion'
         original_trace_id: csv_trace_id of the original submission (required for
             Modificacion and Anulacion)

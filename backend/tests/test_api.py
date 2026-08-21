@@ -31,14 +31,14 @@ class TestHealth:
 
 
 class TestContext:
-    def test_context_returns_200(self, client):
-        r = client.get('/ngsi-ld/cue-context.jsonld')
-        assert r.status_code == 200
-        ctx = r.get_json()['@context']
-        assert 'AgriCropDeclaration' in ctx
-        assert 'SigpacEnclosure' in ctx
-        assert 'campaignYear' in ctx
-        assert 'sigpacReference' in ctx
+    def test_module_does_not_serve_its_own_context(self, client):
+        """CUE's terms live in the platform @context; a second one is how it drifted.
+
+        Coverage that they are reachable now belongs to the platform context tests
+        in the nkz repo; test_platform_vocabulary_adoption.py checks the adoption
+        from this side.
+        """
+        assert client.get('/ngsi-ld/cue-context.jsonld').status_code == 404
 
 
 class TestNotifyWebhook:

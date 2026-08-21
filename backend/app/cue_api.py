@@ -80,107 +80,6 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'cue-api'})
 
 
-@app.route('/ngsi-ld/cue-context.jsonld', methods=['GET'])
-def cue_context():
-    """JSON-LD @context defining custom CUE entities."""
-    context = {
-        "@context": {
-            "AgriCropDeclaration": "urn:ngsi-ld:AgriCropDeclaration",
-            "SigpacEnclosure": "urn:ngsi-ld:SigpacEnclosure",
-
-            "AgriPestTreatment": "https://smart-data-models.github.io/dataModel.Agrifood/AgriPestTreatment/context.jsonld",
-            "AgriFertilizerApplication": "https://smart-data-models.github.io/dataModel.Agrifood/AgriFertilizerApplication/context.jsonld",
-            "AgriIrrigation": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriIrrigation",
-            "AgriHarvest": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriHarvest",
-            "AgriFertilizationPlan": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriFertilizationPlan",
-            "AgriSoilCharacterization": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriSoilCharacterization",
-            "AgriEcoRegime": "https://nekazari.robotika.cloud/ngsi-ld/cue/AgriEcoRegime",
-
-            "campaignYear": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:AgriCropDeclaration:campaignYear"
-            },
-            "cifEntidadHabilitada": {
-                "@type": "Property"
-            },
-            "declaredCrop": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:AgriCropDeclaration:declaredCrop"
-            },
-            "declaredArea": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:AgriCropDeclaration:declaredArea",
-                "unitCode": "HA"
-            },
-            "sigpacReference": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:SigpacEnclosure:sigpacReference"
-            },
-            "eligibleArea": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:SigpacEnclosure:eligibleArea",
-                "unitCode": "HA"
-            },
-            "version": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:version"
-            },
-            "parentId": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:parentId"
-            },
-            "regepa": {
-                "@type": "Property"
-            },
-            "tenantId": {
-                "@type": "Property",
-                "@id": "urn:ngsi-ld:tenantId"
-            },
-
-            # Phase 2 — Anexo V attributes
-            "productoROPORef": {"@type": "Property"},
-            "dosisAplicada": {"@type": "Property", "unitCode": "L/ha"},
-            "plagaObjeto": {"@type": "Property"},
-            "equipoAplicacion": {"@type": "Property"},
-            "aplicador": {"@type": "Property"},
-            "horaAplicacion": {"@type": "Property"},
-            "tipoFertilizante": {"@type": "Property"},
-            "dosisFertilizante": {"@type": "Property", "unitCode": "kg/ha"},
-            "contenidoN": {"@type": "Property", "unitCode": "%"},
-            "contenidoP": {"@type": "Property", "unitCode": "%"},
-            "volumenRiego": {"@type": "Property", "unitCode": "m3"},
-            "sistemaRiego": {"@type": "Property"},
-            "produccionCosecha": {"@type": "Property", "unitCode": "kg"},
-            "calidadCosecha": {"@type": "Property"},
-            "destinoCosecha": {"@type": "Property"},
-            "tipoAbono": {"@type": "Property"},
-            "dosisAbono": {"@type": "Property", "unitCode": "kg/ha"},
-            "texturaSuelo": {"@type": "Property"},
-            "phSuelo": {"@type": "Property"},
-            "materiaOrganica": {"@type": "Property", "unitCode": "%"},
-            "ecoregimenTipo": {"@type": "Property"},
-
-            "hasAgriParcel": {
-                "@type": "@id",
-                "@id": "urn:ngsi-ld:AgriCropDeclaration:hasAgriParcel"
-            },
-            "hasAgriCropDeclaration": {
-                "@type": "@id",
-                "@id": "urn:ngsi-ld:AgriParcel:hasAgriCropDeclaration"
-            },
-            "hasSigpacEnclosure": {
-                "@type": "@id",
-                "@id": "urn:ngsi-ld:AgriCropDeclaration:hasSigpacEnclosure"
-            },
-            "hasAgriFarm": {
-                "@type": "@id",
-                "@id": "urn:ngsi-ld:AgriParcel:hasAgriFarm"
-            }
-        }
-    }
-    return jsonify(context)
-
-
 @app.route('/notify', methods=['POST'])
 def notify():
     """
@@ -1101,7 +1000,7 @@ def restore_recinto(enclosure_id):
 @cue_bp.route('/tratamientos', methods=['GET'])
 @require_auth
 def list_tratamientos():
-    """List AgriPestTreatment entities for current tenant with optional filters."""
+    """List AgriPest entities for current tenant with optional filters."""
     tenant = get_current_tenant()
     parcela_id = request.args.get('parcela_id')
     incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
@@ -1112,7 +1011,7 @@ def list_tratamientos():
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
     q = ';'.join(q_parts)
-    status, result = query_entities('AgriPestTreatment', tenant, {'q': q})
+    status, result = query_entities('AgriPest', tenant, {'q': q})
     if status == 200:
         return jsonify(result), 200
     return jsonify(result), status
@@ -1121,7 +1020,7 @@ def list_tratamientos():
 @cue_bp.route('/tratamientos', methods=['POST'])
 @require_auth
 def create_tratamiento():
-    """Create an AgriPestTreatment entity in Orion-LD."""
+    """Create an AgriPest entity in Orion-LD."""
     data = request.json or {}
     tenant = get_current_tenant()
     tratamiento_id = data.get('id') or _generate_id()
@@ -1174,23 +1073,23 @@ def create_tratamiento():
                 'validation': validation,
             }), 422
 
-    status, result = create_entity('AgriPestTreatment', tenant, tratamiento_id, attributes)
+    status, result = create_entity('AgriPest', tenant, tratamiento_id, attributes)
     return jsonify(result), status if status in (200, 201) else status
 
 
 @cue_bp.route('/tratamientos/<tratamiento_id>', methods=['GET'])
 @require_auth
 def get_tratamiento(tratamiento_id):
-    """Get an AgriPestTreatment entity by ID."""
+    """Get an AgriPest entity by ID."""
     tenant = get_current_tenant()
-    status, result = get_entity('AgriPestTreatment', tenant, tratamiento_id)
+    status, result = get_entity('AgriPest', tenant, tratamiento_id)
     return jsonify(result), status
 
 
 @cue_bp.route('/tratamientos/<tratamiento_id>', methods=['PUT'])
 @require_auth
 def update_tratamiento(tratamiento_id):
-    """Update an AgriPestTreatment entity."""
+    """Update an AgriPest entity."""
     data = request.json or {}
     tenant = get_current_tenant()
     attributes = {}
@@ -1217,7 +1116,7 @@ def update_tratamiento(tratamiento_id):
             "unitCode": data.get('unidad_dosis', 'L/ha')
         })
 
-    status, result = update_entity('AgriPestTreatment', tenant, tratamiento_id, attributes)
+    status, result = update_entity('AgriPest', tenant, tratamiento_id, attributes)
     if status == 204:
         return jsonify({'status': 'updated'}), 200
     return jsonify(result), status
@@ -1226,9 +1125,9 @@ def update_tratamiento(tratamiento_id):
 @cue_bp.route('/tratamientos/<tratamiento_id>', methods=['DELETE'])
 @require_auth
 def delete_tratamiento(tratamiento_id):
-    """Soft-delete an AgriPestTreatment."""
+    """Soft-delete an AgriPest."""
     tenant = get_current_tenant()
-    status, result = delete_entity('AgriPestTreatment', tenant, tratamiento_id)
+    status, result = delete_entity('AgriPest', tenant, tratamiento_id)
     if status == 204:
         return jsonify({'status': 'deleted'}), 200
     return jsonify(result), status
@@ -1237,9 +1136,9 @@ def delete_tratamiento(tratamiento_id):
 @cue_bp.route('/tratamientos/<tratamiento_id>/restore', methods=['POST'])
 @require_auth
 def restore_tratamiento(tratamiento_id):
-    """Restore a soft-deleted AgriPestTreatment."""
+    """Restore a soft-deleted AgriPest."""
     tenant = get_current_tenant()
-    status, result = update_entity('AgriPestTreatment', tenant, tratamiento_id, {'isActive': _property(True)})
+    status, result = update_entity('AgriPest', tenant, tratamiento_id, {'isActive': _property(True)})
     if status == 204:
         return jsonify({'status': 'restored', 'id': tratamiento_id}), 200
     return jsonify(result), status
@@ -1252,7 +1151,7 @@ def restore_tratamiento(tratamiento_id):
 @cue_bp.route('/fertilizaciones', methods=['GET'])
 @require_auth
 def list_fertilizaciones():
-    """List AgriFertilizerApplication entities for current tenant."""
+    """List AgriFertilize entities for current tenant."""
     tenant = get_current_tenant()
     parcela_id = request.args.get('parcela_id')
     incluir_inactivos = request.args.get('incluir_inactivos', 'false').lower() == 'true'
@@ -1263,7 +1162,7 @@ def list_fertilizaciones():
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
     q = ';'.join(q_parts)
-    status, result = query_entities('AgriFertilizerApplication', tenant, {'q': q})
+    status, result = query_entities('AgriFertilize', tenant, {'q': q})
     if status == 200:
         return jsonify(result), 200
     return jsonify(result), status
@@ -1272,7 +1171,7 @@ def list_fertilizaciones():
 @cue_bp.route('/fertilizaciones', methods=['POST'])
 @require_auth
 def create_fertilizacion():
-    """Create an AgriFertilizerApplication entity in Orion-LD."""
+    """Create an AgriFertilize entity in Orion-LD."""
     data = request.json or {}
     tenant = get_current_tenant()
     fertilizacion_id = data.get('id') or _generate_id()
@@ -1307,23 +1206,23 @@ def create_fertilizacion():
         parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
         attributes['hasAgriParcel'] = _relationship(parcela_uri)
 
-    status, result = create_entity('AgriFertilizerApplication', tenant, fertilizacion_id, attributes)
+    status, result = create_entity('AgriFertilize', tenant, fertilizacion_id, attributes)
     return jsonify(result), status if status in (200, 201) else status
 
 
 @cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['GET'])
 @require_auth
 def get_fertilizacion(fertilizacion_id):
-    """Get an AgriFertilizerApplication entity by ID."""
+    """Get an AgriFertilize entity by ID."""
     tenant = get_current_tenant()
-    status, result = get_entity('AgriFertilizerApplication', tenant, fertilizacion_id)
+    status, result = get_entity('AgriFertilize', tenant, fertilizacion_id)
     return jsonify(result), status
 
 
 @cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['PUT'])
 @require_auth
 def update_fertilizacion(fertilizacion_id):
-    """Update an AgriFertilizerApplication entity."""
+    """Update an AgriFertilize entity."""
     data = request.json or {}
     tenant = get_current_tenant()
     attributes = {}
@@ -1356,7 +1255,7 @@ def update_fertilizacion(fertilizacion_id):
             "unitCode": "P1"
         })
 
-    status, result = update_entity('AgriFertilizerApplication', tenant, fertilizacion_id, attributes)
+    status, result = update_entity('AgriFertilize', tenant, fertilizacion_id, attributes)
     if status == 204:
         return jsonify({'status': 'updated'}), 200
     return jsonify(result), status
@@ -1365,9 +1264,9 @@ def update_fertilizacion(fertilizacion_id):
 @cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['DELETE'])
 @require_auth
 def delete_fertilizacion(fertilizacion_id):
-    """Soft-delete an AgriFertilizerApplication."""
+    """Soft-delete an AgriFertilize."""
     tenant = get_current_tenant()
-    status, result = delete_entity('AgriFertilizerApplication', tenant, fertilizacion_id)
+    status, result = delete_entity('AgriFertilize', tenant, fertilizacion_id)
     if status == 204:
         return jsonify({'status': 'deleted'}), 200
     return jsonify(result), status
@@ -1376,9 +1275,9 @@ def delete_fertilizacion(fertilizacion_id):
 @cue_bp.route('/fertilizaciones/<fertilizacion_id>/restore', methods=['POST'])
 @require_auth
 def restore_fertilizacion(fertilizacion_id):
-    """Restore a soft-deleted AgriFertilizerApplication."""
+    """Restore a soft-deleted AgriFertilize."""
     tenant = get_current_tenant()
-    status, result = update_entity('AgriFertilizerApplication', tenant, fertilizacion_id, {'isActive': _property(True)})
+    status, result = update_entity('AgriFertilize', tenant, fertilizacion_id, {'isActive': _property(True)})
     if status == 204:
         return jsonify({'status': 'restored', 'id': fertilizacion_id}), 200
     return jsonify(result), status
@@ -1633,7 +1532,7 @@ def serialize_explotacion(farm_id):
             if p_id:
                 p_uri = _entity_uri('AgriParcel', tenant, p_id)
                 _, trts = query_entities(
-                    'AgriPestTreatment', tenant,
+                    'AgriPest', tenant,
                     {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
                 )
                 treatments.extend(trts if isinstance(trts, list) else [])
@@ -1645,7 +1544,7 @@ def serialize_explotacion(farm_id):
             if p_id:
                 p_uri = _entity_uri('AgriParcel', tenant, p_id)
                 _, ferts = query_entities(
-                    'AgriFertilizerApplication', tenant,
+                    'AgriFertilize', tenant,
                     {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
                 )
                 fertilizations.extend(ferts if isinstance(ferts, list) else [])
@@ -1729,8 +1628,8 @@ def submit_to_iuws(farm_id):
         p_uri = _entity_uri('AgriParcel', tenant, p_id)
         for etype, lst in [
             ('SigpacEnclosure', enclosures),
-            ('AgriPestTreatment', treatments),
-            ('AgriFertilizerApplication', fertilizations),
+            ('AgriPest', treatments),
+            ('AgriFertilize', fertilizations),
         ]:
             _, items = query_entities(etype, tenant, {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'})
             lst.extend(items if isinstance(items, list) else [])
