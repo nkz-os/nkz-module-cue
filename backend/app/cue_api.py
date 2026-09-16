@@ -8,6 +8,7 @@
 import os
 import base64
 import logging
+import hmac
 import json
 import subprocess
 import tempfile
@@ -80,12 +81,27 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'cue-api'})
 
 
+def _notify_unauthorized() -> bool:
+    """Flag-gated auth for the Orion notification receiver (two-phase rollout)."""
+    require = os.getenv("NOTIFY_REQUIRE_INTERNAL_SECRET", "").lower() in (
+        "1", "true", "yes", "on"
+    )
+    if not require:
+        return False
+    secret = os.getenv("INTERNAL_SERVICE_SECRET", "")
+    provided = request.headers.get("X-Internal-Service-Secret", "")
+    return not (secret and hmac.compare_digest(provided, secret))
+
+
 @app.route('/notify', methods=['POST'])
 def notify():
     """
     Process Orion-LD subscription notification.
     Receives {id, subscriptionId, data: [entities]}.
     """
+    if _notify_unauthorized():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
     body = request.get_json(silent=True)
     if not body or 'data' not in body:
         return jsonify({'status': 'error', 'message': 'Cuerpo de notificación inválido'}), 400
