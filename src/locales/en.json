@@ -1,0 +1,26 @@
+{
+  "module": {
+    "name": "Farm Logbook",
+    "description": "Single Farm Logbook — SIEX (RD 1054/2022)"
+  },
+  "nav": {
+    "explotaciones": "Farms",
+    "parcelas": "Production Units",
+    "declaraciones": "Declaration Lines",
+    "recintos": "SIGPAC Enclosures",
+    "tratamientos": "Pest Treatments",
+    "fertilizaciones": "Fertilizations",
+    "catalogos": "Catalogs"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "create": "Create",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "noData": "No data"
+  }
+}
