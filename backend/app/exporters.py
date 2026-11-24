@@ -169,6 +169,9 @@ def _col_letter(idx: int) -> str:
     return res
 
 
+_OOXML_NS = 'http://schemas.openxmlformats.org'  # hygiene:allow
+
+
 def _build_sheet_xml(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
     all_rows = [list(headers)] + [list(r) for r in rows]
     xml_rows = []
@@ -184,7 +187,7 @@ def _build_sheet_xml(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> s
         xml_rows.append(f'<row r="{r_idx}">{"".join(cells)}</row>')
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<worksheet xmlns="{_OOXML_NS}/spreadsheetml/2006/main">'
         f'<sheetData>{"".join(xml_rows)}</sheetData>'
         '</worksheet>'
     )
@@ -264,7 +267,7 @@ def export_notebook_xlsx(notebook: Dict[str, Any]) -> bytes:
         zf.writestr(
             '[Content_Types].xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            f'<Types xmlns="{_OOXML_NS}/package/2006/content-types">'
             '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             '<Default Extension="xml" ContentType="application/xml"/>'
             '<Override PartName="/xl/workbook.xml" '
@@ -274,9 +277,9 @@ def export_notebook_xlsx(notebook: Dict[str, Any]) -> bytes:
         zf.writestr(
             '_rels/.rels',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            f'<Relationships xmlns="{_OOXML_NS}/package/2006/relationships">'
             '<Relationship Id="rId1" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+            f'Type="{_OOXML_NS}/officeDocument/2006/relationships/officeDocument" '
             'Target="xl/workbook.xml"/></Relationships>',
         )
         sheet_tags = ''.join(
@@ -286,20 +289,20 @@ def export_notebook_xlsx(notebook: Dict[str, Any]) -> bytes:
         zf.writestr(
             'xl/workbook.xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f'<workbook xmlns="{_OOXML_NS}/spreadsheetml/2006/main" '
+            f'xmlns:r="{_OOXML_NS}/officeDocument/2006/relationships">'
             f'<sheets>{sheet_tags}</sheets></workbook>',
         )
         rel_tags = ''.join(
             f'<Relationship Id="rId{i}" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+            f'Type="{_OOXML_NS}/officeDocument/2006/relationships/worksheet" '
             f'Target="worksheets/sheet{i}.xml"/>'
             for i in range(1, len(sheets) + 1)
         )
         zf.writestr(
             'xl/_rels/workbook.xml.rels',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            f'<Relationships xmlns="{_OOXML_NS}/package/2006/relationships">'
             f'{rel_tags}</Relationships>',
         )
         for i, (_, headers, rows) in enumerate(sheets, start=1):
