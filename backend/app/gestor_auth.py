@@ -10,6 +10,7 @@ from functools import wraps
 from flask import request, jsonify, g
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import urllib.parse
 import urllib.request
 import json as json_mod
 
@@ -23,6 +24,8 @@ KEYCLOAK_INTERNAL_URL = os.getenv(
     'http://keycloak-service:8080/auth'
 )
 KEYCLOAK_REALM = os.getenv('KEYCLOAK_REALM', 'nekazari')
+KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID', '')
+KEYCLOAK_CLIENT_SECRET = os.getenv('KEYCLOAK_CLIENT_SECRET', '')
 KEYCLOAK_ADMIN_USER = os.getenv('KEYCLOAK_ADMIN_USER', '')
 KEYCLOAK_ADMIN_PASSWORD = os.getenv('KEYCLOAK_ADMIN_PASSWORD', '')
 
@@ -86,18 +89,45 @@ def list_gestor_authorized_tenants(gestor_sub):
 # =========================================================================
 
 def _get_keycloak_admin_token():
-    """Obtain admin token from Keycloak via password grant."""
-    if not KEYCLOAK_ADMIN_USER or not KEYCLOAK_ADMIN_PASSWORD:
-        logger.warning("KEYCLOAK_ADMIN_USER/PASSWORD not configured")
+    """Obtain a Keycloak token for read-only user lookup.
+
+    Prefers a dedicated realm service account (client_credentials with
+    view-users/query-users only). Falls back to legacy master admin
+    credentials only when client credentials are not configured.
+    """
+    client_id = os.getenv('KEYCLOAK_CLIENT_ID', KEYCLOAK_CLIENT_ID)
+    client_secret = os.getenv('KEYCLOAK_CLIENT_SECRET', KEYCLOAK_CLIENT_SECRET)
+    kc_url = os.getenv('KEYCLOAK_INTERNAL_URL', KEYCLOAK_INTERNAL_URL).rstrip('/')
+    realm = os.getenv('KEYCLOAK_REALM', KEYCLOAK_REALM)
+
+    if client_id and client_secret:
+        try:
+            data = urllib.parse.urlencode({
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'grant_type': 'client_credentials',
+            }).encode()
+            url = f"{kc_url}/realms/{realm}/protocol/openid-connect/token"
+            req = urllib.request.Request(url, data=data)
+            resp = urllib.request.urlopen(req, timeout=10)
+            return json_mod.loads(resp.read())['access_token']
+        except Exception as e:
+            logger.error(f"Failed to get Keycloak service-account token: {e}")
+            return None
+
+    admin_user = os.getenv('KEYCLOAK_ADMIN_USER', KEYCLOAK_ADMIN_USER)
+    admin_password = os.getenv('KEYCLOAK_ADMIN_PASSWORD', KEYCLOAK_ADMIN_PASSWORD)
+    if not admin_user or not admin_password:
+        logger.warning("Keycloak lookup credentials not configured")
         return None
     try:
         data = urllib.parse.urlencode({
             'client_id': 'admin-cli',
             'grant_type': 'password',
-            'username': KEYCLOAK_ADMIN_USER,
-            'password': KEYCLOAK_ADMIN_PASSWORD,
+            'username': admin_user,
+            'password': admin_password,
         }).encode()
-        url = f"{KEYCLOAK_INTERNAL_URL}/realms/master/protocol/openid-connect/token"
+        url = f"{kc_url}/realms/master/protocol/openid-connect/token"
         req = urllib.request.Request(url, data=data)
         resp = urllib.request.urlopen(req, timeout=10)
         return json_mod.loads(resp.read())['access_token']

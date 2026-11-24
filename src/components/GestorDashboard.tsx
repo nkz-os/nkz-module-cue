@@ -19,7 +19,8 @@ export const GestorDashboard: React.FC<GestorDashboardProps> = ({ onSelectSubmis
     if (estadoFilter) params.set('estado', estadoFilter);
     if (farmerFilter) params.set('farmer_tenant', farmerFilter);
 
-    const url = `${(window as any).__ENV__?.VITE_API_URL || ''}/api/modules/cue/gestor/submissions?${params}`;
+    const apiUrl = ((window as any).__ENV__?.VITE_API_URL || '').replace(/\/$/, '');
+    const url = `${apiUrl}/api/cue/gestor/submissions?${params}`;
     fetch(url, { credentials: 'include' })
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(data => { setSubmissions(Array.isArray(data) ? data : []); setLoading(false); })

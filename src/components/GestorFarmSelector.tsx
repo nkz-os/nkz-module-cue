@@ -11,8 +11,8 @@ export const GestorFarmSelector: React.FC<GestorFarmSelectorProps> = ({ onSelect
   const [selected, setSelected] = useState('');
 
   useEffect(() => {
-    const apiUrl = (window as any).__ENV__?.VITE_API_URL || '';
-    fetch(apiUrl + '/api/modules/cue/gestor/tenants', { credentials: 'include' })
+    const apiUrl = ((window as any).__ENV__?.VITE_API_URL || '').replace(/\/$/, '');
+    fetch(apiUrl + '/api/cue/gestor/tenants', { credentials: 'include' })
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(data => { setTenants(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });
