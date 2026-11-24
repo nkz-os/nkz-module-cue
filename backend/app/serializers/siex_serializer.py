@@ -44,11 +44,12 @@ FIELD_MAP_FARM: List[Tuple[str, str]] = [
 
 # ParcelaType
 # XSD sequence: Nombre, Cultivo, SuperficieHA, SistemaRiego, Recintos
+# Supports both core/CUE keys (cropType, irrigation) and legacy aliases (hasCrop, irrigationSystem).
 FIELD_MAP_PARCEL: List[Tuple[str, str]] = [
     ('name', 'Nombre'),
-    ('hasCrop', 'Cultivo'),
+    ('cropType|hasCrop', 'Cultivo'),
     ('area', 'SuperficieHA'),
-    ('irrigationSystem', 'SistemaRiego'),
+    ('irrigation|irrigationSystem', 'SistemaRiego'),
 ]
 
 # RecintoType
@@ -130,20 +131,31 @@ def _resolve_nested_attr(entity: dict, dotted_key: str) -> Any:
     return current
 
 
+def _resolve_field(entity: dict, key_spec: str) -> Any:
+    """Resolve a field spec supporting dotted keys and '|'-separated fallback aliases."""
+    for candidate in key_spec.split('|'):
+        if '.' in candidate:
+            val = _resolve_nested_attr(entity, candidate)
+        else:
+            val = entity.get(candidate, '')
+        val = _get_ngsi_value(val)
+        if val not in (None, '', {}):
+            return val
+    return ''
+
+
 def _map_fields(entity: dict, field_map: List[Tuple[str, str]]) -> List[str]:
     """Apply a field map to an entity, returning a list of XML text elements.
 
     Only produces elements for non-empty values. Handles nested attributes
-    via dotted keys and NGSI-LD Property/Relationship unwrapping.
+    via dotted keys, '|'-separated fallback keys, and NGSI-LD Property/Relationship unwrapping.
     """
     children: List[str] = []
     for ngsi_key, xml_key in field_map:
-        if '.' in ngsi_key:
-            val = _resolve_nested_attr(entity, ngsi_key)
-        else:
-            val = entity.get(ngsi_key, '')
-        val = _get_ngsi_value(val)
-        if val:
+        val = _resolve_field(entity, ngsi_key)
+        if val not in (None, '', {}):
+            if ngsi_key == 'area' and isinstance(val, dict):
+                val = val.get('value', val)
             children.append(_text(xml_key, str(val)))
     return children
 
@@ -216,17 +228,7 @@ def build_parcel_xml(parcel: dict) -> str:
 
     XSD sequence: Nombre, Cultivo, SuperficieHA, SistemaRiego, Recintos
     """
-    children: List[str] = []
-    for ngsi_key, xml_key in FIELD_MAP_PARCEL:
-        if '.' in ngsi_key:
-            val = _resolve_nested_attr(parcel, ngsi_key)
-        else:
-            val = parcel.get(ngsi_key, '')
-        val = _get_ngsi_value(val)
-        if val:
-            if ngsi_key == 'area' and isinstance(val, dict):
-                val = val.get('value', val)
-            children.append(_text(xml_key, str(val)))
+    children = _map_fields(parcel, FIELD_MAP_PARCEL)
     return _element('Parcela', children)
 
 
@@ -561,16 +563,27 @@ def serialize_explotacion_to_xml(
 def _match_enclosures_to_parcel(parcel: dict, enclosures: List[dict]) -> List[dict]:
     """Match SIGPAC enclosures to their parent parcel.
 
-    In the NGSI-LD graph:
-      SigpacEnclosure -> hasAgriCropDeclaration -> AgriCropDeclaration
-      AgriParcel (already matched via crop declaration reference)
-
-    For now, return all enclosures since the full graph traversal requires
-    resolving intermediate AgriCropDeclaration entities.
+    Enclosures resolved via AgriCropDeclaration carry '_parcel_uri' (injected by
+    the API graph traversal) or a direct 'hasAgriParcel' relationship. When any
+    enclosure carries parcel linkage, only enclosures matching this parcel's ID
+    are returned. Unlinked enclosures (legacy unit-test fixtures) fall back to
+    returning all enclosures.
     """
-    # TODO: Implement full graph traversal via Orion-LD when the
-    # intermediate AgriCropDeclaration entities are resolved.
-    return enclosures
+    parcel_id = parcel.get('id', '')
+    linked = [
+        e for e in enclosures
+        if isinstance(e, dict) and (e.get('_parcel_uri') or e.get('hasAgriParcel'))
+    ]
+    if not linked:
+        return enclosures
+    matched = []
+    for e in enclosures:
+        if not isinstance(e, dict):
+            continue
+        owner = e.get('_parcel_uri') or _get_ngsi_value(e.get('hasAgriParcel', ''))
+        if owner and parcel_id and owner == parcel_id:
+            matched.append(e)
+    return matched
 
 
 # ---------------------------------------------------------------------------

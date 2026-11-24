@@ -15,6 +15,6 @@ export default defineModule({
   accent: { base: '#0891B2', soft: '#CFFAFE', strong: '#155E75' },
   icon: 'notebook',
   main: MainPage,
-  api: { basePath: '/api/modules/cue' },
+  api: { basePath: '/api/cue' },
   slots: moduleSlots as never,
 });

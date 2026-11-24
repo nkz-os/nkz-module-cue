@@ -16,12 +16,9 @@ from typing import Optional
 import psycopg2
 from psycopg2.extras import execute_values
 
-logger = logging.getLogger(__name__)
+from ..common.db import get_postgres_url
 
-POSTGRES_URL = os.getenv(
-    'POSTGRES_URL',
-    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-)
+logger = logging.getLogger(__name__)
 
 # Official MAPA fertilizer registry dump URL (CSV format)
 FERTILIZANTES_DUMP_URL = os.getenv(
@@ -74,7 +71,7 @@ def sync_fertilizantes_products(products: list[dict], source_hash: str) -> dict:
       row (fecha_fin_validez=today) and INSERT new row
     - If existing and unchanged: skip
     """
-    conn = psycopg2.connect(POSTGRES_URL)
+    conn = psycopg2.connect(get_postgres_url())
     cur = conn.cursor()
 
     inserted = 0

@@ -33,7 +33,7 @@ function appendGestorParam(url: URL): void {
 }
 
 export async function cueGet(path: string, params?: Record<string, string>): Promise<any> {
-  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  const url = new URL(`${getApiUrl()}/api/cue${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
   appendGestorParam(url);
   const response = await fetch(url.toString(), { credentials: 'include' });
@@ -45,7 +45,7 @@ export async function cueGet(path: string, params?: Record<string, string>): Pro
 }
 
 export async function cuePost(path: string, data: any): Promise<any> {
-  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  const url = new URL(`${getApiUrl()}/api/cue${path}`);
   appendGestorParam(url);
   const response = await fetch(url.toString(), {
     method: 'POST',
@@ -59,7 +59,7 @@ export async function cuePost(path: string, data: any): Promise<any> {
 }
 
 export async function cuePut(path: string, data: any): Promise<any> {
-  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  const url = new URL(`${getApiUrl()}/api/cue${path}`);
   appendGestorParam(url);
   const response = await fetch(url.toString(), {
     method: 'PUT',
@@ -75,7 +75,7 @@ export async function cuePut(path: string, data: any): Promise<any> {
 }
 
 export async function cueDelete(path: string): Promise<void> {
-  const url = new URL(`${getApiUrl()}/api/modules/cue${path}`);
+  const url = new URL(`${getApiUrl()}/api/cue${path}`);
   appendGestorParam(url);
   const response = await fetch(url.toString(), {
     method: 'DELETE',
@@ -182,4 +182,48 @@ export const autorizacionesApi = {
   revocar: (id: number) => cueDelete(`/gestor/autorizar/${id}`),
   aprobar: (id: number) => cuePut(`/gestor/autorizar/${id}/aprobar`, {}),
   rechazar: (id: number) => cuePut(`/gestor/autorizar/${id}/rechazar`, {}),
+};
+
+// Consolidated campaign notebook (reads field-operations + FaST + core)
+export const cuadernoApi = {
+  getCampaign: (campaign: number, zvn: boolean = false) =>
+    cueGet(`/cuaderno/${campaign}`, { zvn: zvn ? 'true' : 'false' }),
+  downloadExport: async (
+    campaign: number,
+    format: 'pdf' | 'xlsx' | 'html',
+    zvn: boolean = false,
+  ): Promise<void> => {
+    const url = new URL(`${getApiUrl()}/api/cue/cuaderno/${campaign}/export`);
+    url.searchParams.set('format', format);
+    url.searchParams.set('zvn', zvn ? 'true' : 'false');
+    appendGestorParam(url);
+    const response = await fetch(url.toString(), { credentials: 'include' });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw err;
+    }
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = `cuaderno-cue-${campaign}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(objectUrl);
+  },
+};
+
+// Legal masters (ROMA equipment + ROPO applicators/advisors)
+export const maestrosApi = {
+  listEquipos: (incluirInactivos: boolean = false) =>
+    cueGet('/equipos-roma', incluirInactivos ? { incluir_inactivos: 'true' } : undefined),
+  createEquipo: (data: any) => cuePost('/equipos-roma', data),
+  updateEquipo: (id: number, data: any) => cuePut(`/equipos-roma/${id}`, data),
+  deleteEquipo: (id: number) => cueDelete(`/equipos-roma/${id}`),
+  listAplicadores: (nivel?: string) =>
+    cueGet('/aplicadores-ropo', nivel ? { nivel } : undefined),
+  createAplicador: (data: any) => cuePost('/aplicadores-ropo', data),
+  updateAplicador: (id: number, data: any) => cuePut(`/aplicadores-ropo/${id}`, data),
+  deleteAplicador: (id: number) => cueDelete(`/aplicadores-ropo/${id}`),
 };

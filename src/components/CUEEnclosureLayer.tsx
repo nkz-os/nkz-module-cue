@@ -16,7 +16,7 @@ interface RecintosUpdatedDetail {
 export const CUEEnclosureLayer: React.FC<CUEEnclosureLayerProps> = () => {
   const viewerCtx = useViewerOptional();
   const viewer = viewerCtx?.cesiumViewer ?? null;
-  const isViewerReady = viewerCtx?.isViewerReady !== false;
+  const isViewerReady = Boolean(viewer);
   const [enclosures, setEnclosures] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const entitiesRef = useRef<any[]>([]);

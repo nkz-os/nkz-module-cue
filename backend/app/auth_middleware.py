@@ -8,28 +8,67 @@
 
 import os
 import hmac
+import hashlib
+import time
 import logging
 from functools import wraps
 from flask import request, jsonify, g
 import jwt
 import psycopg2
 
+from .common.db import get_postgres_url
+
 logger = logging.getLogger(__name__)
 
-TRUST_API_GATEWAY = os.getenv('TRUST_API_GATEWAY', 'true').lower() == 'true'
 GESTOR_ROLE = 'GestorCUE'
+HMAC_WINDOW_SECONDS = 300
 
 # Internal-service-secret may bypass JWT for read-only reference GETs, plus an
 # explicit allowlist of internal write endpoints (SIEX registration from
-# field-operations). It MUST NOT cover arbitrary mutations.
+# field-operations and scheduled IUWS polling). It MUST NOT cover arbitrary mutations.
 _INTERNAL_WRITE_PATHS = frozenset({
     '/api/modules/cue/tratamientos',
     '/api/modules/cue/fertilizaciones',
+    '/api/modules/cue/poll-iuws',
 })
-POSTGRES_URL = os.getenv(
-    'POSTGRES_URL',
-    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-)
+
+
+def _require_hmac() -> bool:
+    # Fail-closed by default: require HMAC unless explicitly opted out for local dev/tests.
+    return os.getenv('REQUIRE_HMAC_SIGNATURE', 'true').lower() not in ('0', 'false', 'no', 'off')
+
+
+def verify_hmac_signature(
+    secret: str,
+    signature_header: str,
+    token: str,
+    tenant_id: str,
+    window_seconds: int = HMAC_WINDOW_SECONDS,
+) -> bool:
+    """Verify canonical platform HMAC signature ({hexdigest}:{timestamp}).
+
+    Payload format: '{token}|{tenant_id}|{timestamp}'.
+    Fail-closed when secret or header is missing/malformed/expired.
+    """
+    if not secret or not signature_header:
+        return False
+    parts = signature_header.split(':')
+    if len(parts) != 2:
+        return False
+    provided_sig, timestamp_str = parts
+    try:
+        timestamp = int(timestamp_str)
+    except ValueError:
+        return False
+    if abs(int(time.time()) - timestamp) > window_seconds:
+        return False
+    payload = f'{token}|{tenant_id}|{timestamp}'
+    expected_sig = hmac.new(
+        secret.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(provided_sig, expected_sig)
 
 
 def _validate_gestor_access(gestor_sub, farmer_tenant):
@@ -37,7 +76,7 @@ def _validate_gestor_access(gestor_sub, farmer_tenant):
     conn = None
     cur = None
     try:
-        conn = psycopg2.connect(POSTGRES_URL)
+        conn = psycopg2.connect(get_postgres_url())
         cur = conn.cursor()
         cur.execute(
             "SELECT 1 FROM cue_gestor_autorizaciones "
@@ -99,6 +138,13 @@ def require_auth(f):
 
         tenant_id = request.headers.get('X-Tenant-ID')
 
+        if _require_hmac():
+            hmac_secret = os.getenv('HMAC_SECRET', '')
+            sig_header = request.headers.get('X-Auth-Signature', '')
+            if not tenant_id or not verify_hmac_signature(hmac_secret, sig_header, token, tenant_id):
+                logger.warning("Rejected request with missing or invalid X-Auth-Signature")
+                return jsonify({'error': 'Firma de autenticación inválida o ausente'}), 401
+
         try:
             payload = jwt.decode(token, options={
                 "verify_signature": False,
@@ -116,6 +162,8 @@ def require_auth(f):
                 logger.warning("No tenant_id found in token or X-Tenant-ID header")
                 return jsonify({'error': 'No se encontró el ID del tenant'}), 401
 
+            # Identity and roles come strictly from the HMAC-bound JWT payload,
+            # never from unsigned X-User-ID / X-User-Roles headers.
             g.current_user = payload
             g.tenant = tenant_id
             g.tenant_id = tenant_id

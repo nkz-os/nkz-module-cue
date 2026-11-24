@@ -1,39 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SlotShell } from '@nekazari/viewer-kit';
 import { Loader2, AlertCircle, Plus, Search } from 'lucide-react';
+import { CuadernoCampanyaPanel } from './CuadernoCampanyaPanel';
+import { MaestrosPanel } from './MaestrosPanel';
 import { ExplotacionList } from './ExplotacionList';
 import { ExplotacionForm } from './ExplotacionForm';
-import { TratamientoList } from './TratamientoList';
-import { TratamientoForm } from './TratamientoForm';
-import { FertilizacionList } from './FertilizacionList';
-import { FertilizacionForm } from './FertilizacionForm';
 import { CatalogoPanel } from './CatalogoPanel';
 import { RecintoForm } from './RecintoForm';
 import { RecintoBatchForm } from './RecintoBatchForm';
-import { recintosApi, declaracionesApi, firmaApi, submissionsApi, catalogosApi, setGestorTargetTenant, autorizacionesApi, gestorApi } from '../services/cueApi';
+import { recintosApi, declaracionesApi, explotacionesApi, firmaApi, submissionsApi, catalogosApi, setGestorTargetTenant, autorizacionesApi, gestorApi } from '../services/cueApi';
 import { FirmaWidget } from './FirmaWidget';
 import { GestorDashboard } from './GestorDashboard';
 import { GestorFarmSelector } from './GestorFarmSelector';
 
-type TabId = 'explotaciones' | 'tratamientos' | 'fertilizaciones' | 'catalogos' | 'recintos' | 'comunidades' | 'gestoria';
+type TabId = 'cuaderno' | 'maestros' | 'explotaciones' | 'catalogos' | 'recintos' | 'comunidades' | 'gestoria';
 type ViewMode = 'list' | 'create' | 'edit';
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'explotaciones', label: 'Explotaciones' },
-  { id: 'tratamientos', label: 'Tratamientos' },
-  { id: 'fertilizaciones', label: 'Fertilizaciones' },
-  { id: 'catalogos', label: 'Catálogos' },
-  { id: 'recintos', label: 'Recintos' },
-  { id: 'comunidades', label: 'Comunidades' },
-  { id: 'gestoria' as TabId, label: 'Gestoría' },
-];
-
-const cueAccent = { base: '#EF4444', soft: '#FEE2E2', strong: '#B91C1C' };
+const cueAccent = { base: '#0891B2', soft: '#CFFAFE', strong: '#155E75' };
 
 export const CUEMainPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>('explotaciones');
+  const { t } = useTranslation('cue');
+  const [activeTab, setActiveTab] = useState<TabId>('cuaderno');
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [mode, setMode] = useState<ViewMode>('list');
+  const [farmsForSubmit, setFarmsForSubmit] = useState<any[]>([]);
+
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'cuaderno', label: t('nav.cuaderno') },
+    { id: 'maestros', label: t('nav.maestros') },
+    { id: 'explotaciones', label: t('nav.explotaciones') },
+    { id: 'catalogos', label: t('nav.catalogos') },
+    { id: 'recintos', label: t('nav.recintos') },
+    { id: 'comunidades', label: t('nav.comunidades') },
+    { id: 'gestoria', label: t('nav.gestoria') },
+  ];
 
   // Recintos tab state
   const [batchRecintos, setBatchRecintos] = useState(false);
@@ -162,6 +163,13 @@ export const CUEMainPanel: React.FC = () => {
     }
   }, []);
 
+  // Load farms for the IUWS submission dropdown
+  useEffect(() => {
+    explotacionesApi.list()
+      .then((data: any) => setFarmsForSubmit(Array.isArray(data) ? data : []))
+      .catch(() => setFarmsForSubmit([]));
+  }, [gestorTargetTenant]);
+
   // Fetch autorizaciones when Gestoria tab is active (farmer side)
   useEffect(() => {
     if (activeTab === 'gestoria') {
@@ -200,17 +208,11 @@ export const CUEMainPanel: React.FC = () => {
       .catch(err => alert('Error: ' + (err.error || 'No se pudo duplicar')));
   };
 
-  // Firma handlers
+  // Firma handlers (cert kept in browser memory and sent atomically with POST /submit)
   const handleCertLoaded = async function (b64: string, password: string) {
     setCertB64(b64);
     setCertPassword(password);
-    if (!submitFarmId.trim()) return;
-    try {
-      await firmaApi.uploadCert(submitFarmId.trim(), b64, password);
-      setFirmaLoaded(true);
-    } catch (err: any) {
-      setFirmaLoaded(false);
-    }
+    setFirmaLoaded(Boolean(b64 && password));
   };
 
   const handleCertClear = function () {
@@ -226,16 +228,20 @@ export const CUEMainPanel: React.FC = () => {
     setSubmitError(null);
     setSubmitResult(null);
     try {
-      const result = await submissionsApi.submit(submitFarmId.trim());
+      const payload: Record<string, any> = {};
+      if (certB64 && certPassword) {
+        payload.certificado = certB64;
+        payload.contrasena = certPassword;
+      }
+      const result = await submissionsApi.submit(submitFarmId.trim(), payload);
       setSubmitResult(result);
-      // Clear cert from frontend state after submission
-      setFirmaLoaded(false);
-      setCertB64(null);
-      setCertPassword(null);
-      firmaApi.purgeCert().catch(function () {});
     } catch (err: any) {
       setSubmitError(err?.error || 'Error al enviar a IUWS');
     } finally {
+      // Always wipe certificate material from frontend state after submission attempt
+      setFirmaLoaded(false);
+      setCertB64(null);
+      setCertPassword(null);
       setSubmitLoading(false);
     }
   };
@@ -368,48 +374,23 @@ export const CUEMainPanel: React.FC = () => {
   };
 
   const renderTabContent = () => {
-    // If in create or edit mode, show the form for the current tab
-    if (mode !== 'list' && activeTab !== 'catalogos' && activeTab !== 'recintos') {
-      switch (activeTab) {
-        case 'explotaciones':
-          return React.createElement(ExplotacionForm, {
-            key: selectedEntity?.id || 'new',
-            onSaved: handleSaved,
-            explotacion: mode === 'edit' ? selectedEntity : undefined,
-          });
-        case 'tratamientos':
-          return React.createElement(TratamientoForm, {
-            key: selectedEntity?.id || 'new',
-            onSaved: handleSaved,
-            tratamiento: mode === 'edit' ? selectedEntity : undefined,
-          });
-        case 'fertilizaciones':
-          return React.createElement(FertilizacionForm, {
-            key: selectedEntity?.id || 'new',
-            onSaved: handleSaved,
-            fertilizacion: mode === 'edit' ? selectedEntity : undefined,
-          });
-        default:
-          return null;
-      }
+    // If in create or edit mode, show the form for explotaciones
+    if (mode !== 'list' && activeTab === 'explotaciones') {
+      return React.createElement(ExplotacionForm, {
+        key: selectedEntity?.id || 'new',
+        onSaved: handleSaved,
+        explotacion: mode === 'edit' ? selectedEntity : undefined,
+      });
     }
 
-    // List mode or catalogos/recintos tab
+    // Main views
     switch (activeTab) {
+      case 'cuaderno':
+        return React.createElement(CuadernoCampanyaPanel, null);
+      case 'maestros':
+        return React.createElement(MaestrosPanel, null);
       case 'explotaciones':
         return React.createElement(ExplotacionList, {
-          key: 'list',
-          onSelect: handleSelect,
-          onNew: handleNew,
-        });
-      case 'tratamientos':
-        return React.createElement(TratamientoList, {
-          key: 'list',
-          onSelect: handleSelect,
-          onNew: handleNew,
-        });
-      case 'fertilizaciones':
-        return React.createElement(FertilizacionList, {
           key: 'list',
           onSelect: handleSelect,
           onNew: handleNew,
@@ -678,7 +659,7 @@ export const CUEMainPanel: React.FC = () => {
     );
   }
 
-  return React.createElement(SlotShell, { moduleId: 'cue', accent: cueAccent },
+  return React.createElement(SlotShell as React.ComponentType<any>, { moduleId: 'cue', accent: cueAccent },
     React.createElement('div', { className: 'space-y-4' },
     // Module header
     React.createElement('div', { className: 'bg-white rounded-lg shadow p-4' },
@@ -740,20 +721,26 @@ export const CUEMainPanel: React.FC = () => {
         'suba su certificado digital (.p12/.pfx) para firma mTLS ante IUWS.'
       ),
 
-      // Farm ID input
+      // Farm selector dropdown (replaces manual UUID entry)
       React.createElement('div', { className: 'mb-3' },
         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' },
-          'ID de la explotación'
+          t('submit.selectFarm')
         ),
-        React.createElement('input', {
-          type: 'text',
+        React.createElement('select', {
           value: submitFarmId,
-          onChange: function (e: React.ChangeEvent<HTMLInputElement>) {
+          onChange: function (e: React.ChangeEvent<HTMLSelectElement>) {
             setSubmitFarmId(e.target.value);
           },
-          placeholder: 'ID de la explotación a enviar...',
-          className: 'border border-gray-300 rounded px-3 py-2 w-full text-sm',
-        })
+          className: 'border border-gray-300 rounded px-3 py-2 w-full text-sm bg-white',
+        },
+          React.createElement('option', { value: '' }, t('submit.selectFarmPlaceholder')),
+          ...farmsForSubmit.map(function (f: any) {
+            var fid = (f.id || '').split(':').pop() || f.id;
+            return React.createElement('option', { key: f.id || fid, value: fid },
+              (f.name || f.nombre || fid) + (f.regepa ? ' (' + f.regepa + ')' : '')
+            );
+          })
+        )
       ),
 
       // FirmaWidget
