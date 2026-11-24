@@ -1,0 +1,2 @@
+# Standard ECMA-376 OpenXML namespace URIs used in stdlib .xlsx export
+schemas.openxmlformats.org

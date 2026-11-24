@@ -122,7 +122,10 @@ class TestFailFastAndCors:
         assert _parse_cors_origins('*') == []
         assert _parse_cors_origins('') == []
         assert _parse_cors_origins('["https://example.org", "*"]') == ['https://example.org']
-        assert _parse_cors_origins('https://a.org, https://b.org') == ['https://a.org', 'https://b.org']
+        assert _parse_cors_origins('https://a.example.org, https://b.example.org') == [
+            'https://a.example.org',
+            'https://b.example.org',
+        ]
 
 
 class TestTenantIsolationAndPollGuard:
