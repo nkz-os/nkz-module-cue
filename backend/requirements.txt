@@ -7,3 +7,5 @@ PyJWT>=2.8.0
 pytest>=9.0.0
 lxml>=4.9.0
 xmlschema>=2.5.0
+cryptography>=42.0.0
+weasyprint>=60.0

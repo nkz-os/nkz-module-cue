@@ -11,8 +11,9 @@ from .auth_middleware import require_auth, get_current_tenant
 from .gestor_auth import (
     require_gestor_mode, GESTOR_ROLE,
     list_gestor_authorized_tenants,
-    lookup_user_by_email, POSTGRES_URL,
+    lookup_user_by_email,
 )
+from .common.db import get_postgres_url
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ gestor_bp = Blueprint('gestor', __name__, url_prefix='/api/modules/cue/gestor')
 
 
 def _get_pg_conn():
-    conn = psycopg2.connect(POSTGRES_URL)
+    conn = psycopg2.connect(get_postgres_url())
     conn.cursor_factory = RealDictCursor
     return conn
 

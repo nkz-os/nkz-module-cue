@@ -14,12 +14,9 @@ from typing import Optional, Dict, Any, List, Tuple
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-logger = logging.getLogger(__name__)
+from ..common.db import get_postgres_url
 
-POSTGRES_URL = os.getenv(
-    'POSTGRES_URL',
-    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-)
+logger = logging.getLogger(__name__)
 
 # Valid states and their order
 STATES = [
@@ -51,7 +48,7 @@ TRANSITIONS = {
 
 
 def _get_conn():
-    conn = psycopg2.connect(POSTGRES_URL)
+    conn = psycopg2.connect(get_postgres_url())
     conn.cursor_factory = RealDictCursor
     return conn
 
@@ -93,12 +90,18 @@ def create_submission(
             conn.close()
 
 
-def transition_state(submission_id: int, new_state: str, metadata: Optional[Dict] = None) -> Tuple[bool, str]:
+def transition_state(
+    submission_id: int,
+    new_state: str,
+    metadata: Optional[Dict] = None,
+    tenant_id: Optional[str] = None,
+) -> Tuple[bool, str]:
     """
     Transition a submission to a new state.
 
     Returns (success, message).
     Validates that the transition is allowed.
+    When tenant_id is provided, enforces tenant ownership.
     """
     if new_state not in STATES:
         return False, f'Estado invalido: {new_state}. Estados validos: {STATES}'
@@ -109,8 +112,14 @@ def transition_state(submission_id: int, new_state: str, metadata: Optional[Dict
         conn = _get_conn()
         cur = conn.cursor()
 
-        # Get current state
-        cur.execute("SELECT estado FROM cue_estado_envio WHERE id = %s", (submission_id,))
+        # Get current state (scoped by tenant_id when provided)
+        if tenant_id is not None:
+            cur.execute(
+                "SELECT estado FROM cue_estado_envio WHERE id = %s AND tenant_id = %s",
+                (submission_id, tenant_id),
+            )
+        else:
+            cur.execute("SELECT estado FROM cue_estado_envio WHERE id = %s", (submission_id,))
         row = cur.fetchone()
         if not row:
             return False, f'Envio {submission_id} no encontrado'
@@ -138,9 +147,13 @@ def transition_state(submission_id: int, new_state: str, metadata: Optional[Dict
             updates.append("detalle_respuesta = COALESCE(detalle_respuesta, '{}'::jsonb) || %s::jsonb")
             params.append(json.dumps(metadata))
 
+        where_clause = "WHERE id = %s"
         params.append(submission_id)
+        if tenant_id is not None:
+            where_clause += " AND tenant_id = %s"
+            params.append(tenant_id)
         cur.execute(
-            f"UPDATE cue_estado_envio SET {', '.join(updates)} WHERE id = %s",
+            f"UPDATE cue_estado_envio SET {', '.join(updates)} {where_clause}",
             params
         )
         conn.commit()
@@ -183,14 +196,20 @@ def set_ticket(submission_id: int, id_ticket: str, csv_trace_id: Optional[str] =
             conn.close()
 
 
-def get_submission(submission_id: int) -> Optional[Dict]:
-    """Get a submission by ID."""
+def get_submission(submission_id: int, tenant_id: Optional[str] = None) -> Optional[Dict]:
+    """Get a submission by ID, optionally scoped to tenant_id."""
     conn = None
     cur = None
     try:
         conn = _get_conn()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM cue_estado_envio WHERE id = %s", (submission_id,))
+        if tenant_id is not None:
+            cur.execute(
+                "SELECT * FROM cue_estado_envio WHERE id = %s AND tenant_id = %s",
+                (submission_id, tenant_id),
+            )
+        else:
+            cur.execute("SELECT * FROM cue_estado_envio WHERE id = %s", (submission_id,))
         row = cur.fetchone()
         if row:
             result = dict(row)

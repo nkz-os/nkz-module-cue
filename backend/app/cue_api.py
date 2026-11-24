@@ -15,15 +15,16 @@ import tempfile
 from datetime import date
 import psycopg2
 import psycopg2.extras
-from flask import Flask, Blueprint, jsonify, request
+from flask import Flask, Blueprint, jsonify, request, g, Response
 from flask_cors import CORS
 
 from .auth_middleware import require_auth, get_current_tenant
+from .common.db import get_postgres_url
 from .orion_client import (
     _entity_uri, _property, _relationship, _geo_property,
     create_entity, get_entity, query_entities, update_entity, delete_entity,
 )
-from .orion_sync import process_notification, POSTGRES_URL
+from .orion_sync import process_notification
 from .serializers.siex_serializer import (
     serialize_explotacion_to_xml,
     validate_against_xsd,
@@ -59,16 +60,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# CORS origins
+# CORS origins (never wildcard '*' with supports_credentials=True)
 # ---------------------------------------------------------------------------
-CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+def _parse_cors_origins(raw: str) -> list[str]:
+    raw = (raw or '').strip()
+    if not raw or raw == '*':
+        return []
+    if raw.startswith('['):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(o).strip() for o in parsed if str(o).strip() and str(o).strip() != '*']
+        except ValueError:
+            pass
+    return [o.strip() for o in raw.split(',') if o.strip() and o.strip() != '*']
+
+
+CORS_ORIGINS = _parse_cors_origins(os.getenv('CORS_ORIGINS', ''))
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
-CORS(app, origins=CORS_ORIGINS.split(',') if CORS_ORIGINS != '*' else '*',
-     supports_credentials=True)
+CORS(app, origins=CORS_ORIGINS, supports_credentials=True)
 
 
 # ===========================================================================
@@ -134,9 +148,33 @@ def _tenant_filter():
 
 def get_pg_conn():
     """Get a psycopg2 connection with RealDictCursor."""
-    conn = psycopg2.connect(POSTGRES_URL)
+    conn = psycopg2.connect(get_postgres_url())
     conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
+
+
+def _normalize_entity_id(raw_id: str) -> str:
+    """Accept either a short entity ID or a full NGSI-LD URN and return the short ID."""
+    if not raw_id:
+        return ''
+    s = str(raw_id).strip()
+    if s.startswith('urn:ngsi-ld:'):
+        parts = s.split(':')
+        if len(parts) >= 4:
+            return parts[-1]
+    return s
+
+
+def _resolve_parcel_uri(tenant: str, raw_id: str) -> str:
+    """Resolve a short parcel ID or full 4/5-part AgriParcel URN to a safe URN."""
+    if not raw_id:
+        return ''
+    s = str(raw_id).strip()
+    if s.startswith('urn:ngsi-ld:AgriParcel:'):
+        # Validate trailing ID segment for NGSI-LD query safety
+        _entity_uri('AgriParcel', tenant, s.split(':')[-1])
+        return s
+    return _entity_uri('AgriParcel', tenant, s)
 
 
 def _validate_polygon(geom):
@@ -292,9 +330,11 @@ def create_explotacion():
 
     municipio = body.get('municipio', '')
     provincia = body.get('provincia', '')
-    partes = [p for p in [municipio, provincia] if p]
-    if partes:
-        attributes['address'] = _property(', '.join(partes))
+    if municipio or provincia:
+        attributes['address'] = _property({
+            'addressLocality': municipio,
+            'addressRegion': provincia,
+        })
 
     coordenadas = body.get('coordenadas')
     if coordenadas and len(coordenadas) == 2:
@@ -354,12 +394,12 @@ def update_explotacion(farm_id):
     municipio = body.get('municipio')
     provincia = body.get('provincia')
     if municipio is not None or provincia is not None:
-        partes = []
-        if municipio:
-            partes.append(municipio)
-        if provincia:
-            partes.append(provincia)
-        attributes['address'] = _property(', '.join(partes))
+        addr_obj = {}
+        if municipio is not None:
+            addr_obj['addressLocality'] = municipio
+        if provincia is not None:
+            addr_obj['addressRegion'] = provincia
+        attributes['address'] = _property(addr_obj)
 
     coordenadas = body.get('coordenadas')
     if coordenadas and len(coordenadas) == 2:
@@ -919,7 +959,8 @@ def get_recinto(enclosure_id):
                 updated_at
             FROM cue_recinto_sigpac
             WHERE orion_entity_id = %s
-        """, (entity_uri,))
+              AND tenant_id = %s
+        """, (entity_uri, tenant))
         row = cur.fetchone()
 
         if row:
@@ -1024,7 +1065,7 @@ def list_tratamientos():
     if not incluir_inactivos:
         q_parts.append('isActive!=false')
     if parcela_id:
-        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        parcela_uri = _resolve_parcel_uri(tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
     q = ';'.join(q_parts)
     status, result = query_entities('AgriPest', tenant, {'q': q})
@@ -1062,14 +1103,14 @@ def create_tratamiento():
         "isActive": _property(True),
     }
 
-    parcela_id = data.get('parcela_id')
-    if parcela_id:
-        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+    parcela_raw = data.get('parcela_id', '')
+    if parcela_raw:
+        parcela_uri = _resolve_parcel_uri(tenant, parcela_raw)
         attributes['hasAgriParcel'] = _relationship(parcela_uri)
 
     # Validate against rules engine before creating
     if data.get('validar', True):
-        from rules.engine import validate_tratamiento as validate_tratamiento_rules
+        from .rules.engine import validate_tratamiento as validate_tratamiento_rules
         try:
             fecha_app = date.fromisoformat(data.get('fecha', '')) if data.get('fecha') else date.today()
         except (ValueError, TypeError):
@@ -1090,7 +1131,11 @@ def create_tratamiento():
             }), 422
 
     status, result = create_entity('AgriPest', tenant, tratamiento_id, attributes)
-    return jsonify(result), status if status in (200, 201) else status
+    if status in (200, 201, 204):
+        payload = dict(result) if isinstance(result, dict) else {}
+        payload.setdefault('id', _entity_uri('AgriPest', tenant, tratamiento_id))
+        return jsonify(payload), 201 if status == 204 else status
+    return jsonify(result), status
 
 
 @cue_bp.route('/tratamientos/<tratamiento_id>', methods=['GET'])
@@ -1175,7 +1220,7 @@ def list_fertilizaciones():
     if not incluir_inactivos:
         q_parts.append('isActive!=false')
     if parcela_id:
-        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+        parcela_uri = _resolve_parcel_uri(tenant, parcela_id)
         q_parts.append(f'hasAgriParcel=="{parcela_uri}"')
     q = ';'.join(q_parts)
     status, result = query_entities('AgriFertilize', tenant, {'q': q})
@@ -1217,13 +1262,17 @@ def create_fertilizacion():
         "isActive": _property(True),
     }
 
-    parcela_id = data.get('parcela_id')
-    if parcela_id:
-        parcela_uri = _entity_uri('AgriParcel', tenant, parcela_id)
+    parcela_raw = data.get('parcela_id', '')
+    if parcela_raw:
+        parcela_uri = _resolve_parcel_uri(tenant, parcela_raw)
         attributes['hasAgriParcel'] = _relationship(parcela_uri)
 
     status, result = create_entity('AgriFertilize', tenant, fertilizacion_id, attributes)
-    return jsonify(result), status if status in (200, 201) else status
+    if status in (200, 201, 204):
+        payload = dict(result) if isinstance(result, dict) else {}
+        payload.setdefault('id', _entity_uri('AgriFertilize', tenant, fertilizacion_id))
+        return jsonify(payload), 201 if status == 204 else status
+    return jsonify(result), status
 
 
 @cue_bp.route('/fertilizaciones/<fertilizacion_id>', methods=['GET'])
@@ -1450,7 +1499,7 @@ def validate_tratamiento_endpoint():
     Validate a phytosanitary treatment against SIEX rules before creating.
     Does NOT create the entity — only validates.
     """
-    from rules.engine import validate_tratamiento as validate_tratamiento_rules
+    from .rules.engine import validate_tratamiento as validate_tratamiento_rules
 
     data = request.json or {}
     tenant = get_current_tenant()
@@ -1493,6 +1542,64 @@ def validate_tratamiento_endpoint():
 # SERIALIZATION ENDPOINT (Anti-Corruption Layer)
 # =========================================================================
 
+def _fetch_enclosures_for_parcelas(tenant: str, parcelas: list) -> list:
+    """Resolve SigpacEnclosure entities for a list of parcels.
+
+    Follows the canonical graph AgriParcel <- AgriCropDeclaration <- SigpacEnclosure,
+    falling back to direct SigpacEnclosure.hasAgriParcel if no declarations exist.
+    Each returned enclosure is tagged with '_parcel_uri' so the SIEX serializer
+    places it under its owning parcel.
+    """
+    enclosures = []
+    for p in parcelas:
+        if not isinstance(p, dict):
+            continue
+        p_uri = p.get('id', '')
+        p_id = _normalize_entity_id(p_uri)
+        if not p_id:
+            continue
+        if not p_uri.startswith('urn:ngsi-ld:'):
+            p_uri = _entity_uri('AgriParcel', tenant, p_id)
+
+        _, decls = query_entities(
+            'AgriCropDeclaration', tenant,
+            {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
+        )
+        decls = decls if isinstance(decls, list) else []
+
+        parcel_encs = []
+        for d in decls:
+            if not isinstance(d, dict):
+                continue
+            d_uri = d.get('id', '')
+            d_id = _normalize_entity_id(d_uri)
+            if not d_id:
+                continue
+            if not d_uri.startswith('urn:ngsi-ld:'):
+                d_uri = _entity_uri('AgriCropDeclaration', tenant, d_id)
+            _, encs = query_entities(
+                'SigpacEnclosure', tenant,
+                {'q': f'hasAgriCropDeclaration=="{d_uri}";isActive!=false'}
+            )
+            if isinstance(encs, list):
+                parcel_encs.extend(encs)
+
+        # Fallback for legacy enclosures linked directly to AgriParcel
+        if not parcel_encs:
+            _, direct_encs = query_entities(
+                'SigpacEnclosure', tenant,
+                {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
+            )
+            if isinstance(direct_encs, list):
+                parcel_encs.extend(direct_encs)
+
+        for enc in parcel_encs:
+            if isinstance(enc, dict):
+                tagged = dict(enc)
+                tagged['_parcel_uri'] = p_uri
+                enclosures.append(tagged)
+    return enclosures
+
 @cue_bp.route('/serialize/<farm_id>', methods=['GET'])
 @require_auth
 def serialize_explotacion(farm_id):
@@ -1529,17 +1636,8 @@ def serialize_explotacion(farm_id):
         )
         parcelas = parcelas if isinstance(parcelas, list) else []
 
-        # 3. Fetch enclosures for all parcelas
-        enclosures = []
-        for p in parcelas:
-            p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
-            if p_id:
-                p_uri = _entity_uri('AgriParcel', tenant, p_id)
-                _, encs = query_entities(
-                    'SigpacEnclosure', tenant,
-                    {'q': f'hasAgriParcel=="{p_uri}";isActive!=false'}
-                )
-                enclosures.extend(encs if isinstance(encs, list) else [])
+        # 3. Fetch enclosures for all parcelas (via AgriCropDeclaration -> SigpacEnclosure)
+        enclosures = _fetch_enclosures_for_parcelas(tenant, parcelas)
 
         # 4. Fetch treatments for all parcelas
         treatments = []
@@ -1636,14 +1734,14 @@ def submit_to_iuws(farm_id):
     _, parcelas = query_entities('AgriParcel', tenant, {'q': f'hasAgriFarm=="{farm_uri}";isActive!=false'})
     parcelas = parcelas if isinstance(parcelas, list) else []
 
-    enclosures, treatments, fertilizations = [], [], []
+    enclosures = _fetch_enclosures_for_parcelas(tenant, parcelas)
+    treatments, fertilizations = [], []
     for p in parcelas:
         p_id = p.get('id', '').split(':')[-1] if isinstance(p, dict) else ''
         if not p_id:
             continue
         p_uri = _entity_uri('AgriParcel', tenant, p_id)
         for etype, lst in [
-            ('SigpacEnclosure', enclosures),
             ('AgriPest', treatments),
             ('AgriFertilize', fertilizations),
         ]:
@@ -1682,7 +1780,17 @@ def submit_to_iuws(farm_id):
     transition_state(submission_id, 'validado')
     transition_state(submission_id, 'firmado')
 
-    # 7. Submit to IUWS
+    # 7. Load ephemeral PKCS#12 cert atomically in this request (Vía B) if provided
+    cert_b64 = data.get('certificado')
+    cert_password = data.get('contrasena')
+    if cert_b64 and cert_password:
+        try:
+            cert_pem, key_pem = _extract_pkcs12_pem(cert_b64, cert_password)
+            set_ephemeral_cert(cert_pem, key_pem)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+    # 8. Submit to IUWS
     try:
         status, result = submit_cue(iuws_url, xml_str, nif, cif)
     finally:
@@ -1718,9 +1826,30 @@ def check_submission(id_ticket):
     Query params:
         provincia: 2-digit province code to resolve IUWS endpoint
     """
+    tenant = get_current_tenant()
     provincia = request.args.get('provincia')
     if not provincia:
         return jsonify({'error': 'Se requiere el parámetro provincia (código de 2 dígitos)'}), 400
+
+    # Verify tenant owns this ticket before querying IUWS
+    conn = cur = None
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM cue_estado_envio WHERE id_ticket = %s AND tenant_id = %s LIMIT 1",
+            (id_ticket, tenant),
+        )
+        if not cur.fetchone():
+            return jsonify({'error': 'Ticket de envío no encontrado'}), 404
+    except Exception as e:
+        logger.error(f"Error verifying ticket ownership for {id_ticket}: {e}")
+        return jsonify({'error': 'Error al verificar el envío'}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
     iuws_url = resolve_iuws_url(provincia)
     if not iuws_url:
@@ -1792,8 +1921,9 @@ def list_submissions_endpoint():
 @cue_bp.route('/submissions/<int:submission_id>', methods=['GET'])
 @require_auth
 def get_submission_endpoint(submission_id):
-    """Get a single submission by ID."""
-    sub = get_submission(submission_id)
+    """Get a single submission by ID (scoped to current tenant)."""
+    tenant = get_current_tenant()
+    sub = get_submission(submission_id, tenant_id=tenant)
     if sub:
         return jsonify(sub), 200
     return jsonify({'error': 'Envio no encontrado'}), 404
@@ -1802,13 +1932,14 @@ def get_submission_endpoint(submission_id):
 @cue_bp.route('/submissions/<int:submission_id>/transition', methods=['POST'])
 @require_auth
 def transition_submission_endpoint(submission_id):
-    """Manually transition a submission state."""
+    """Manually transition a submission state (scoped to current tenant)."""
+    tenant = get_current_tenant()
     data = request.json or {}
     new_state = data.get('estado')
     if not new_state:
         return jsonify({'error': 'Se requiere el campo estado'}), 400
 
-    ok, msg = transition_state(submission_id, new_state, data.get('metadata'))
+    ok, msg = transition_state(submission_id, new_state, data.get('metadata'), tenant_id=tenant)
     if ok:
         return jsonify({'status': 'transitioned', 'message': msg}), 200
     return jsonify({'error': msg}), 422
@@ -1824,13 +1955,16 @@ def trigger_iuws_polling():
     """
     Trigger a manual IUWS polling cycle.
 
-    Checks all pending/procesando submissions against their IUWS endpoints
-    and updates their states.
-
-    In production, this is also run as a cron job (every 5 min).
+    Restricted to internal service calls or PlatformAdmin because it polls
+    pending submissions across all tenants.
     """
+    is_internal = getattr(g, 'user_id', None) == 'internal-service'
+    roles = getattr(g, 'roles', []) or []
+    if not is_internal and 'PlatformAdmin' not in roles:
+        return jsonify({'error': 'Acceso restringido a administración o servicio interno'}), 403
+
     tenant = get_current_tenant()
-    logger.info(f"Manual IUWS polling triggered by tenant {tenant}")
+    logger.info(f"Manual IUWS polling triggered by {getattr(g, 'user_id', 'unknown')} (tenant={tenant})")
     summary = run_polling_cycle()
     return jsonify(summary), 200
 
@@ -1840,16 +1974,46 @@ def trigger_iuws_polling():
 # =========================================================================
 
 
+def _extract_pkcs12_pem(cert_b64: str, password: str) -> tuple[str, str]:
+    """Extract (cert_pem, key_pem) from a base64 PKCS#12 bundle strictly in memory.
+
+    Uses cryptography.hazmat instead of spawning an openssl subprocess (avoids
+    exposing the passphrase in /proc/<pid>/cmdline or writing .p12 temp files).
+    """
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.serialization import pkcs12
+
+    try:
+        cert_der = base64.b64decode(cert_b64, validate=True)
+    except Exception as exc:
+        raise ValueError('El certificado no esta codificado en base64 valido') from exc
+
+    try:
+        private_key, certificate, _additional = pkcs12.load_key_and_certificates(
+            cert_der,
+            password.encode('utf-8'),
+        )
+    except Exception as exc:
+        raise ValueError('No se pudo leer el certificado. Verifique la contrasena.') from exc
+
+    if private_key is None or certificate is None:
+        raise ValueError('El archivo PKCS#12 no contiene certificado y clave privada validos.')
+
+    cert_pem = certificate.public_bytes(serialization.Encoding.PEM).decode('utf-8')
+    key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode('utf-8')
+    return cert_pem, key_pem
+
+
 @cue_bp.route('/firma/<farm_id>', methods=['POST'])
 @require_auth
 def upload_firma_cert(farm_id):
     """
-    Upload a PKCS#12 certificate for AutoFirma ephemeral mTLS flow.
-
-    The certificate and password are loaded into RAM, used for the next
-    IUWS call, then purged. NEVER written to disk. NEVER logged.
-
-    Body: { certificado: "<base64>", contrasena: "<password>" }
+    Validate and load a PKCS#12 certificate in memory (legacy two-step endpoint;
+    prefer sending certificado/contrasena atomically in POST /submit/<farm_id>).
     """
     data = request.json or {}
     cert_b64 = data.get('certificado')
@@ -1859,62 +2023,19 @@ def upload_firma_cert(farm_id):
         return jsonify({'error': 'Se requiere certificado (base64) y contrasena'}), 400
 
     try:
-        # Decode base64 to DER
-        cert_der = base64.b64decode(cert_b64)
-
-        # Write to temp file to extract PEM with openssl
-        # (pkcs12 to pem extraction requires a file, but it's in /tmp which is
-        #  tmpfs in K8s — never persists to disk)
-        with tempfile.NamedTemporaryFile(suffix='.p12', delete=False) as tmp:
-            tmp.write(cert_der)
-            tmp_path = tmp.name
-
-        try:
-            # Extract certificate
-            cert_result = subprocess.run(
-                ['openssl', 'pkcs12', '-in', tmp_path, '-clcerts', '-nokeys',
-                 '-passin', f'pass:{password}'],
-                capture_output=True, text=True, timeout=10
-            )
-            if cert_result.returncode != 0:
-                return jsonify({
-                    'error': 'No se pudo leer el certificado. Verifique la contrasena.'
-                }), 400
-
-            # Extract private key
-            key_result = subprocess.run(
-                ['openssl', 'pkcs12', '-in', tmp_path, '-nocerts', '-nodes',
-                 '-passin', f'pass:{password}'],
-                capture_output=True, text=True, timeout=10
-            )
-            if key_result.returncode != 0:
-                return jsonify({
-                    'error': 'No se pudo extraer la clave privada. Verifique la contrasena.'
-                }), 400
-
-            cert_pem = cert_result.stdout
-            key_pem = key_result.stdout
-
-            # Load into RAM (never to disk)
-            set_ephemeral_cert(cert_pem, key_pem)
-
-            logger.info(f"Ephemeral certificate loaded for farm {farm_id}")
-            return jsonify({
-                'status': 'loaded',
-                'message': 'Certificado cargado en memoria. Se eliminara tras el envio.',
-            }), 200
-
-        finally:
-            # Purge temp file immediately
-            os.unlink(tmp_path)
-
-    except (ValueError, UnicodeError) as e:
-        logger.error(f"Base64 decode error: {e}")
-        return jsonify({'error': 'El certificado no esta codificado en base64 valido'}), 400
+        cert_pem, key_pem = _extract_pkcs12_pem(cert_b64, password)
+        set_ephemeral_cert(cert_pem, key_pem)
+        logger.info(f"Ephemeral certificate loaded in memory for farm {farm_id}")
+        return jsonify({
+            'status': 'loaded',
+            'message': 'Certificado cargado en memoria. Se eliminara tras el envio.',
+        }), 200
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     except Exception as e:
         logger.error(f"Error loading ephemeral cert for farm {farm_id}: {e}")
         purge_ephemeral_cert()
-        return jsonify({'error': f'Error al procesar el certificado: {str(e)}'}), 500
+        return jsonify({'error': 'Error al procesar el certificado'}), 500
 
 
 @cue_bp.route('/firma', methods=['DELETE'])
@@ -1928,8 +2049,61 @@ def purge_firma_cert():
     }), 200
 
 
+# =========================================================================
+# CAMPAIGN NOTEBOOK (read-only consolidation: field-ops + FaST + core)
+# =========================================================================
+
+@cue_bp.route('/cuaderno/<int:campaign>', methods=['GET'])
+@require_auth
+def get_campaign_notebook(campaign):
+    """Return the consolidated RD 1054/2022 + RD 1051/2022 campaign notebook."""
+    if not (2000 <= campaign <= 2100):
+        return jsonify({'error': 'La campaña debe estar entre 2000 y 2100'}), 400
+    from .notebook_aggregator import build_campaign_notebook
+    tenant = get_current_tenant()
+    zvn = request.args.get('zvn', 'false').lower() in ('1', 'true', 'yes', 'on')
+    notebook = build_campaign_notebook(tenant, campaign, vulnerable_zone=zvn)
+    return jsonify(notebook), 200
+
+
+@cue_bp.route('/cuaderno/<int:campaign>/export', methods=['GET'])
+@require_auth
+def export_campaign_notebook(campaign):
+    """Export the consolidated campaign notebook as PDF, XLSX, or HTML."""
+    if not (2000 <= campaign <= 2100):
+        return jsonify({'error': 'La campaña debe estar entre 2000 y 2100'}), 400
+    fmt = (request.args.get('format') or 'pdf').lower().strip()
+    if fmt not in ('pdf', 'xlsx', 'html'):
+        return jsonify({'error': 'Formato no soportado. Use pdf, xlsx o html'}), 400
+    from .notebook_aggregator import build_campaign_notebook
+    from .exporters import export_notebook_html, export_notebook_pdf, export_notebook_xlsx
+    tenant = get_current_tenant()
+    zvn = request.args.get('zvn', 'false').lower() in ('1', 'true', 'yes', 'on')
+    notebook = build_campaign_notebook(tenant, campaign, vulnerable_zone=zvn)
+    filename = f'cuaderno-cue-{campaign}.{fmt}'
+    if fmt == 'html':
+        return Response(
+            export_notebook_html(notebook),
+            mimetype='text/html; charset=utf-8',
+            headers={'Content-Disposition': f'inline; filename="{filename}"'},
+        )
+    if fmt == 'xlsx':
+        return Response(
+            export_notebook_xlsx(notebook),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        )
+    return Response(
+        export_notebook_pdf(notebook),
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
 from .gestor_routes import gestor_bp
+from .maestros_routes import maestros_bp
 app.register_blueprint(gestor_bp)
+app.register_blueprint(maestros_bp)
 
 app.register_blueprint(cue_bp)
 

@@ -43,12 +43,13 @@ INSERT INTO marketplace_modules (
     false,
     true,
     ARRAY['Farmer', 'TenantAdmin'],
-    '{"icon": "📋", "color": "#22C55E"}'::jsonb
+    '{"icon": "📋", "color": "#22C55E", "api_prefix": "/api/cue", "backend_service": "http://cue-backend-service:5000", "backend_mount": "/api/modules/cue"}'::jsonb
 ) ON CONFLICT (id) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
     remote_entry_url = EXCLUDED.remote_entry_url,
     scope = EXCLUDED.scope,
     exposed_module = EXCLUDED.exposed_module,
+    metadata = COALESCE(marketplace_modules.metadata, '{}'::jsonb) || EXCLUDED.metadata,
     is_active = true,
     updated_at = NOW();

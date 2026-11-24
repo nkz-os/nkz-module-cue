@@ -144,14 +144,11 @@ def resolve_iuws_url(codigo_provincia: str) -> Optional[str]:
     Queries cue_endpoints_autonomicos table.
     """
     import psycopg2
+    from ..common.db import get_postgres_url
     conn = None
     cur = None
     try:
-        postgres_url = os.getenv(
-            'POSTGRES_URL',
-            'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-        )
-        conn = psycopg2.connect(postgres_url)
+        conn = psycopg2.connect(get_postgres_url())
         cur = conn.cursor()
         cur.execute(
             "SELECT iuws_base_url, comunidad "

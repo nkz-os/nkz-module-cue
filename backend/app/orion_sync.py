@@ -11,13 +11,9 @@ import logging
 import json
 import psycopg2
 from typing import Dict, Any, Optional
+from .common.db import get_postgres_url
 
 logger = logging.getLogger(__name__)
-
-POSTGRES_URL = os.getenv(
-    'POSTGRES_URL',
-    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-)
 
 
 def extract_ngsi_ld_value(attribute: Any) -> Any:
@@ -98,7 +94,7 @@ def sync_enclosure_to_postgres(
             'coordinates': coordinates,
         })
 
-        conn = psycopg2.connect(POSTGRES_URL)
+        conn = psycopg2.connect(get_postgres_url())
         cur = conn.cursor()
 
         cur.execute("""

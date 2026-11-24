@@ -13,13 +13,11 @@ from psycopg2.extras import RealDictCursor
 import urllib.request
 import json as json_mod
 
+from .common.db import get_postgres_url
+
 logger = logging.getLogger(__name__)
 
 GESTOR_ROLE = 'GestorCUE'
-POSTGRES_URL = os.getenv(
-    'POSTGRES_URL',
-    'postgresql://postgres:postgres@postgresql-service:5432/nekazari'
-)
 KEYCLOAK_INTERNAL_URL = os.getenv(
     'KEYCLOAK_INTERNAL_URL',
     'http://keycloak-service:8080/auth'
@@ -30,7 +28,7 @@ KEYCLOAK_ADMIN_PASSWORD = os.getenv('KEYCLOAK_ADMIN_PASSWORD', '')
 
 
 def _get_pg_conn():
-    conn = psycopg2.connect(POSTGRES_URL)
+    conn = psycopg2.connect(get_postgres_url())
     conn.cursor_factory = RealDictCursor
     return conn
 
