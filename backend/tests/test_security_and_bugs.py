@@ -282,3 +282,34 @@ class TestBackendBugFixes:
         assert 'BEGIN PRIVATE KEY' in key_pem
         with pytest.raises(ValueError, match='contrasena'):
             _extract_pkcs12_pem(base64.b64encode(p12_bytes).decode(), 'wrong-pwd')
+
+
+class TestKeycloakServiceAccountToken:
+    def test_prefers_client_credentials_over_admin_password(self, monkeypatch):
+        from app import gestor_auth
+
+        monkeypatch.setenv('KEYCLOAK_CLIENT_ID', 'cue-user-lookup')
+        monkeypatch.setenv('KEYCLOAK_CLIENT_SECRET', 'sa-secret')
+        monkeypatch.setenv('KEYCLOAK_REALM', 'test-realm')
+        monkeypatch.setenv('KEYCLOAK_INTERNAL_URL', 'http://keycloak-service:8080/auth')
+        monkeypatch.delenv('KEYCLOAK_ADMIN_USER', raising=False)
+        monkeypatch.delenv('KEYCLOAK_ADMIN_PASSWORD', raising=False)
+
+        captured = {}
+
+        class _FakeResp:
+            def read(self):
+                return b'{"access_token": "sa-token-123"}'
+
+        def _fake_urlopen(req, timeout=10):
+            captured['url'] = req.full_url
+            captured['body'] = req.data.decode('utf-8')
+            return _FakeResp()
+
+        with patch('app.gestor_auth.urllib.request.urlopen', side_effect=_fake_urlopen):
+            tok = gestor_auth._get_keycloak_admin_token()
+
+        assert tok == 'sa-token-123'
+        assert captured['url'] == 'http://keycloak-service:8080/auth/realms/test-realm/protocol/openid-connect/token'
+        assert 'grant_type=client_credentials' in captured['body']
+        assert 'client_id=cue-user-lookup' in captured['body']
